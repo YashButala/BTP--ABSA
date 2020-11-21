@@ -113,19 +113,19 @@ def load_vocab(vocab_file):
     return word_v, char_v
 
 
-def get_adj_mat(amat):
-    K = 5
-    adj_mat = np.zeros((len(amat), len(amat)), np.float32)
-    for i in range(len(amat)):
-        for j in range(len(amat)):
-            if 0 <= amat[i][j] <= K:
-                adj_mat[i][j] = 1.0 / math.pow(2, amat[i][j])
-            else:
-                adj_mat[i][j] = 0
-    return adj_mat
+# def get_adj_mat(amat):
+#     K = 5
+#     adj_mat = np.zeros((len(amat), len(amat)), np.float32)
+#     for i in range(len(amat)):
+#         for j in range(len(amat)):
+#             if 0 <= amat[i][j] <= K:
+#                 adj_mat[i][j] = 1.0 / math.pow(2, amat[i][j])
+#             else:
+#                 adj_mat[i][j] = 0
+#     return adj_mat
 
 
-def get_data(src_lines, trg_lines, adj_lines, datatype):
+def get_data(src_lines, trg_lines,  datatype):
     samples = []
     uid = 1
     src_len = -1
@@ -147,8 +147,8 @@ def get_data(src_lines, trg_lines, adj_lines, datatype):
         trg_words += trg_line.split()
         trg_words.append('<EOS>')
 
-        adj_data = json.loads(adj_lines[i])
-        adj_mat = get_adj_mat(adj_data['adj_mat'])
+        # adj_data = json.loads(adj_lines[i])
+        # adj_mat = get_adj_mat(adj_data['adj_mat'])
 
         if datatype == 1 and (len(src_words) > max_src_len or len(trg_words) > max_trg_len + 1):
             continue
@@ -157,7 +157,7 @@ def get_data(src_lines, trg_lines, adj_lines, datatype):
         if len(trg_words) > trg_len:
             trg_len = len(trg_words)
         sample = Sample(Id=uid, SrcLen=len(src_words), SrcWords=src_words, TrgLen=len(trg_words),
-                        TrgWords=trg_words, AdjMat=adj_mat)
+                        TrgWords=trg_words)
         samples.append(sample)
         uid += 1
     print(src_len)
@@ -165,7 +165,7 @@ def get_data(src_lines, trg_lines, adj_lines, datatype):
     return samples
 
 
-def read_data(src_file, trg_file, adj_file, datatype):
+def read_data(src_file, trg_file,  datatype):
     reader = open(src_file)
     src_lines = reader.readlines()
     reader.close()
@@ -174,16 +174,16 @@ def read_data(src_file, trg_file, adj_file, datatype):
     trg_lines = reader.readlines()
     reader.close()
 
-    reader = open(adj_file)
-    adj_lines = reader.readlines()
-    reader.close()
+    # reader = open(adj_file)
+    # adj_lines = reader.readlines()
+    # reader.close()
 
     # tot_len = 100
     # src_lines = src_lines[0:min(tot_len, len(src_lines))]
     # trg_lines = trg_lines[0:min(tot_len, len(trg_lines))]
     # adj_lines = adj_lines[0:min(tot_len, len(adj_lines))]
 
-    data = get_data(src_lines, trg_lines, adj_lines, datatype)
+    data = get_data(src_lines, trg_lines, datatype)
     return data
 
 
@@ -459,7 +459,7 @@ def get_batch_data(cur_samples, is_training=False):
 
     trg_words_list = list()
     trg_vocab_mask = list()
-    adj_lst = []
+    # adj_lst = []
 
     target = list()
     cnt = 0
@@ -469,9 +469,9 @@ def get_batch_data(cur_samples, is_training=False):
         src_char_seq.append(get_char_seq(sample.SrcWords, batch_src_max_len))
         trg_vocab_mask.append(get_target_vocab_mask(sample.SrcWords))
 
-        cur_masked_adj = np.zeros((batch_src_max_len, batch_src_max_len), dtype=np.float32)
-        cur_masked_adj[:len(sample.SrcWords), :len(sample.SrcWords)] = sample.AdjMat
-        adj_lst.append(cur_masked_adj)
+        # cur_masked_adj = np.zeros((batch_src_max_len, batch_src_max_len), dtype=np.float32)
+        # cur_masked_adj[:len(sample.SrcWords), :len(sample.SrcWords)] = sample.AdjMat
+        # adj_lst.append(cur_masked_adj)
 
         if is_training:
             padded_trg_words = get_words_index_seq(sample.TrgWords, batch_trg_max_len)
@@ -484,7 +484,7 @@ def get_batch_data(cur_samples, is_training=False):
     return {'src_words': np.array(src_words_list, dtype=np.float32),
             'src_chars': np.array(src_char_seq),
             'src_words_mask': np.array(src_words_mask_list),
-            'adj': np.array(adj_lst),
+        #    'adj': np.array(adj_lst),
             'trg_vocab_mask': np.array(trg_vocab_mask),
             'trg_words': np.array(trg_words_list, dtype=np.int32),
             'target': np.array(target)}
@@ -563,7 +563,7 @@ class Encoder(nn.Module):
         self.conv1d = nn.Conv1d(char_embed_dim, char_feature_size, conv_filter_size)
         self.max_pool = nn.MaxPool1d(max_word_len + conv_filter_size - 1, max_word_len + conv_filter_size - 1)
 
-    def forward(self, words_input, char_seq, adj, is_training=False):
+    def forward(self, words_input, char_seq,  is_training=False):
         char_embeds = self.char_embeddings(char_seq)
         char_embeds = char_embeds.permute(0, 2, 1)
 
@@ -694,7 +694,7 @@ class SeqToSeqModel(nn.Module):
         self.encoder = Encoder(enc_inp_size, int(enc_hidden_size/2), layers, True, drop_rate)
         self.decoder = Decoder(dec_inp_size, dec_hidden_size, layers, drop_rate, max_trg_len)
 
-    def forward(self, src_words_seq, src_chars_seq, src_mask, trg_words_seq, trg_vocab_mask, adj, is_training=False):
+    def forward(self, src_words_seq, src_chars_seq, src_mask, trg_words_seq, trg_vocab_mask,  is_training=False):
         src_word_embeds = self.word_embeddings(src_words_seq)
         trg_word_embeds = self.word_embeddings(trg_words_seq)
 
@@ -704,7 +704,7 @@ class SeqToSeqModel(nn.Module):
         else:
             time_steps = max_trg_len
 
-        encoder_output = self.encoder(src_word_embeds, src_chars_seq, adj, is_training)
+        encoder_output = self.encoder(src_word_embeds, src_chars_seq,  is_training)
 
         h0 = autograd.Variable(torch.FloatTensor(torch.zeros(batch_len, word_embed_dim)))
         h0 = h0.cuda()
@@ -796,7 +796,7 @@ def predict(samples, model, model_id):
         src_words_mask = torch.from_numpy(cur_samples_input['src_words_mask'].astype('uint8'))
         trg_vocab_mask = torch.from_numpy(cur_samples_input['trg_vocab_mask'].astype('uint8'))
         trg_words_seq = torch.from_numpy(cur_samples_input['trg_words'].astype('long'))
-        adj = torch.from_numpy(cur_samples_input['adj'].astype('float32'))
+    #    adj = torch.from_numpy(cur_samples_input['adj'].astype('float32'))
         src_chars_seq = torch.from_numpy(cur_samples_input['src_chars'].astype('long'))
 
         if torch.cuda.is_available():
@@ -804,19 +804,19 @@ def predict(samples, model, model_id):
             src_words_mask = src_words_mask.cuda()
             trg_vocab_mask = trg_vocab_mask.cuda()
             trg_words_seq = trg_words_seq.cuda()
-            adj = adj.cuda()
+        #    adj = adj.cuda()
             src_chars_seq = src_chars_seq.cuda()
 
         src_words_seq = autograd.Variable(src_words_seq)
         src_words_mask = autograd.Variable(src_words_mask)
         trg_vocab_mask = autograd.Variable(trg_vocab_mask)
-        adj = autograd.Variable(adj)
+    #    adj = autograd.Variable(adj)
         src_chars_seq = autograd.Variable(src_chars_seq)
 
         trg_words_seq = autograd.Variable(trg_words_seq)
         with torch.no_grad():
             if model_id == 1:
-                outputs = model(src_words_seq, src_chars_seq, src_words_mask, trg_words_seq, trg_vocab_mask, adj,
+                outputs = model(src_words_seq, src_chars_seq, src_words_mask, trg_words_seq, trg_vocab_mask,
                                 False)
 
         preds += list(outputs[0].data.cpu().numpy())
@@ -875,7 +875,7 @@ def train_model(model_id, train_samples, dev_samples, best_model_file):
             src_words_mask = torch.from_numpy(cur_samples_input['src_words_mask'].astype('uint8'))
             trg_vocab_mask = torch.from_numpy(cur_samples_input['trg_vocab_mask'].astype('uint8'))
             trg_words_seq = torch.from_numpy(cur_samples_input['trg_words'].astype('long'))
-            adj = torch.from_numpy(cur_samples_input['adj'].astype('float32'))
+            # adj = torch.from_numpy(cur_samples_input['adj'].astype('float32'))
             src_chars_seq = torch.from_numpy(cur_samples_input['src_chars'].astype('long'))
 
             target = torch.from_numpy(cur_samples_input['target'].astype('long'))
@@ -885,7 +885,7 @@ def train_model(model_id, train_samples, dev_samples, best_model_file):
                 src_words_mask = src_words_mask.cuda()
                 trg_vocab_mask = trg_vocab_mask.cuda()
                 trg_words_seq = trg_words_seq.cuda()
-                adj = adj.cuda()
+            #    adj = adj.cuda()
                 src_chars_seq = src_chars_seq.cuda()
 
                 target = target.cuda()
@@ -894,13 +894,13 @@ def train_model(model_id, train_samples, dev_samples, best_model_file):
             src_words_mask = autograd.Variable(src_words_mask)
             trg_vocab_mask = autograd.Variable(trg_vocab_mask)
             trg_words_seq = autograd.Variable(trg_words_seq)
-            adj = autograd.Variable(adj)
+            # adj = autograd.Variable(adj)
             src_chars_seq = autograd.Variable(src_chars_seq)
 
             target = autograd.Variable(target)
 
             if model_id == 1:
-                outputs = model(src_words_seq, src_chars_seq, src_words_mask, trg_words_seq, trg_vocab_mask, adj, True)
+                outputs = model(src_words_seq, src_chars_seq, src_words_mask, trg_words_seq, trg_vocab_mask, True)
 
             target = target.view(-1, 1).squeeze()
             loss = criterion(outputs, target)
@@ -986,7 +986,7 @@ if __name__ == "__main__":
     layers = 1
     early_stop_cnt = 5
     sample_cnt = 0
-    Sample = recordclass("Sample", "Id SrcLen SrcWords TrgLen TrgWords AdjMat")
+    Sample = recordclass("Sample", "Id SrcLen SrcWords TrgLen TrgWords")
     rel_file = os.path.join(src_data_folder, 'relations.txt')
     relations = get_relations(rel_file)
 
@@ -998,14 +998,14 @@ if __name__ == "__main__":
         custom_print('loading data......')
         model_file_name = os.path.join(trg_data_folder, 'model.h5py')
         src_train_file = os.path.join(src_data_folder, 'train.sent')
-        adj_train_file = os.path.join(src_data_folder, 'train.dep')
+        # adj_train_file = os.path.join(src_data_folder, 'train.dep')
         trg_train_file = os.path.join(src_data_folder, 'train.tup')
-        train_data = read_data(src_train_file, trg_train_file, adj_train_file, 1)
+        train_data = read_data(src_train_file, trg_train_file,  1)
 
         src_dev_file = os.path.join(src_data_folder, 'dev.sent')
-        adj_dev_file = os.path.join(src_data_folder, 'dev.dep')
+        # adj_dev_file = os.path.join(src_data_folder, 'dev.dep')
         trg_dev_file = os.path.join(src_data_folder, 'dev.tup')
-        dev_data = read_data(src_dev_file, trg_dev_file, adj_dev_file, 2)
+        dev_data = read_data(src_dev_file, trg_dev_file,  2)
 
         custom_print('Training data size:', len(train_data))
         custom_print('Development data size:', len(dev_data))
@@ -1035,9 +1035,9 @@ if __name__ == "__main__":
         custom_print('vocab size:', len(word_vocab))
 
         src_test_file = os.path.join(src_data_folder, 'test.sent')
-        adj_test_file = os.path.join(src_data_folder, 'test.dep')
+        # adj_test_file = os.path.join(src_data_folder, 'test.dep')
         trg_test_file = os.path.join(src_data_folder, 'test.tup')
-        test_data = read_data(src_test_file, trg_test_file, adj_test_file, 3)
+        test_data = read_data(src_test_file, trg_test_file, 3)
         custom_print('Test data size:', len(test_data))
 
         custom_print('seed:', random_seed)
