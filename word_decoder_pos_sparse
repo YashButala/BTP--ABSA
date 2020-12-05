@@ -100,7 +100,6 @@ def build_tags(file1, file2):
 def build_vocab(data, rels, vocab_file, embed_file, pos_vocab):        #return map of word, rev word ,char and embedding matrix
     vocab = OrderedDict()
     char_v = OrderedDict()
-    pos_vocab = OrderedDict()                               #get dictionary mapping from pos tags to index
     char_v['<PAD>'] = 0
     char_v['<UNK>'] = 1
     char_v[';'] = 2
