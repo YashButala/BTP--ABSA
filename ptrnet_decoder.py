@@ -93,22 +93,22 @@ def load_vocab(vocab_file):
     return embed_vocab, char_vocab
 
 
-def get_adj_mat(sent_len, amat):
-    K = 5
-    adj_mat = np.zeros((sent_len, sent_len), np.float32)
-    for i in range(len(amat)):
-        for j in range(len(amat)):
-            if 0 <= amat[i][j] <= K:
-                adj_mat[i][j] = 1.0 / math.pow(2, amat[i][j])
-            else:
-                adj_mat[i][j] = 0
+# def get_adj_mat(sent_len, amat):
+#     K = 5
+#     adj_mat = np.zeros((sent_len, sent_len), np.float32)
+#     for i in range(len(amat)):
+#         for j in range(len(amat)):
+#             if 0 <= amat[i][j] <= K:
+#                 adj_mat[i][j] = 1.0 / math.pow(2, amat[i][j])
+#             else:
+#                 adj_mat[i][j] = 0
 
-    for i in range(sent_len):
-        adj_mat[i][i] = 1
-    return adj_mat
+#     for i in range(sent_len):
+#         adj_mat[i][i] = 1
+#     return adj_mat
 
 
-def get_data(src_lines, trg_lines, adj_lines, datatype):
+def get_data(src_lines, trg_lines, datatype):
     samples = []
     uid = 1
     for i in range(0, len(src_lines)):
@@ -122,8 +122,8 @@ def get_data(src_lines, trg_lines, adj_lines, datatype):
         if datatype == 1:
             random.shuffle(parts)
 
-        adj_data = json.loads(adj_lines[i])
-        adj_mat = get_adj_mat(len(src_words), adj_data['adj_mat'])
+        # adj_data = json.loads(adj_lines[i])
+        # adj_mat = get_adj_mat(len(src_words), adj_data['adj_mat'])
 
         for part in parts:
             elements = part.strip().split()
@@ -134,13 +134,13 @@ def get_data(src_lines, trg_lines, adj_lines, datatype):
             continue
 
         sample = Sample(Id=uid, SrcLen=len(src_words), SrcWords=src_words, TrgLen=len(trg_rels), TrgRels=trg_rels,
-                        TrgPointers=trg_pointers, AdjMat=adj_mat)
+                        TrgPointers=trg_pointers)
         samples.append(sample)
         uid += 1
     return samples
 
 
-def read_data(src_file, trg_file, adj_file, datatype):
+def read_data(src_file, trg_file,  datatype):
     reader = open(src_file)
     src_lines = reader.readlines()
     reader.close()
@@ -149,16 +149,16 @@ def read_data(src_file, trg_file, adj_file, datatype):
     trg_lines = reader.readlines()
     reader.close()
 
-    reader = open(adj_file)
-    adj_lines = reader.readlines()
-    reader.close()
+    # reader = open(adj_file)
+    # adj_lines = reader.readlines()
+    # reader.close()
 
     # l = 1000
     # src_lines = src_lines[0:min(l, len(src_lines))]
     # trg_lines = trg_lines[0:min(l, len(trg_lines))]
     # adj_lines = adj_lines[0:min(l, len(adj_lines))]
 
-    data = get_data(src_lines, trg_lines, adj_lines, datatype)
+    data = get_data(src_lines, trg_lines,  datatype)
     return data
 
 
@@ -460,7 +460,7 @@ def get_batch_data(cur_samples, is_training=False):
     src_words_mask_list = list()
     src_char_seq = list()
     decoder_input_list = list()
-    adj_lst = []
+    # adj_lst = []
     positional_index_list = []
 
     rel_seq = list()
@@ -475,9 +475,9 @@ def get_batch_data(cur_samples, is_training=False):
         src_words_list.append(get_words_index_seq(sample.SrcWords, batch_src_max_len))
         src_words_mask_list.append(get_padded_mask(sample.SrcLen, batch_src_max_len))
         src_char_seq.append(get_char_seq(sample.SrcWords, batch_src_max_len))
-        cur_masked_adj = np.zeros((batch_src_max_len, batch_src_max_len), dtype=np.float32)
-        cur_masked_adj[:len(sample.SrcWords), :len(sample.SrcWords)] = sample.AdjMat
-        adj_lst.append(cur_masked_adj)
+        # cur_masked_adj = np.zeros((batch_src_max_len, batch_src_max_len), dtype=np.float32)
+        # cur_masked_adj[:len(sample.SrcWords), :len(sample.SrcWords)] = sample.AdjMat
+        # adj_lst.append(cur_masked_adj)
         positional_index_list.append(get_positional_index(len(sample.SrcWords), batch_src_max_len))
 
         if is_training:
@@ -499,7 +499,7 @@ def get_batch_data(cur_samples, is_training=False):
             'src_words_mask': np.array(src_words_mask_list),
             'src_chars': np.array(src_char_seq),
             'decoder_input': np.array(decoder_input_list),
-            'adj': np.array(adj_lst),
+            # 'adj': np.array(adj_lst),
             'rel': np.array(rel_seq),
             'arg1_start':np.array(arg1_start_seq),
             'arg1_end': np.array(arg1_end_seq),
@@ -712,7 +712,7 @@ class Encoder(nn.Module):
         # self.mhc = 3
         # self.mha = Multi_Head_Self_Attention(self.mhc, 2 * self.hidden_dim)
 
-    def forward(self, words, chars, pos_seq, adj, is_training=False):
+    def forward(self, words, chars, pos_seq,  is_training=False):
         src_word_embeds = self.word_embeddings(words)
         # pos_embeds = self.dropout(self.pos_embeddings(pos_seq))
         char_embeds = self.char_embeddings(chars)
@@ -888,7 +888,7 @@ class Seq2SeqModel(nn.Module):
         # self.w = nn.Linear(10 * dec_inp_size, dec_inp_size)
         self.dropout = nn.Dropout(drop_rate)
 
-    def forward(self, src_words_seq, src_mask, src_char_seq, pos_seq, trg_words_seq, trg_rel_cnt, adj,
+    def forward(self, src_words_seq, src_mask, src_char_seq, pos_seq, trg_words_seq, trg_rel_cnt, 
                 arg1_mask, arg2_mask, is_training=False):
         if is_training:
             trg_word_embeds = self.dropout(self.relation_embeddings(trg_words_seq))
@@ -896,7 +896,7 @@ class Seq2SeqModel(nn.Module):
         src_time_steps = src_words_seq.size()[1]
         time_steps = trg_rel_cnt
 
-        enc_hs = self.encoder(src_words_seq, src_char_seq, pos_seq, adj, is_training)
+        enc_hs = self.encoder(src_words_seq, src_char_seq, pos_seq, is_training)
 
         h0 = autograd.Variable(torch.FloatTensor(torch.zeros(batch_len, dec_hidden_size))).cuda()
         c0 = autograd.Variable(torch.FloatTensor(torch.zeros(batch_len, dec_hidden_size))).cuda()
@@ -1007,27 +1007,27 @@ def predict(samples, model, model_id):
         src_words_mask = torch.from_numpy(cur_samples_input['src_words_mask'].astype('uint8'))
         trg_words_seq = torch.from_numpy(cur_samples_input['decoder_input'].astype('long'))
         src_chars_seq = torch.from_numpy(cur_samples_input['src_chars'].astype('long'))
-        adj = torch.from_numpy(cur_samples_input['adj'].astype('float32'))
+        # adj = torch.from_numpy(cur_samples_input['adj'].astype('float32'))
 
         if torch.cuda.is_available():
             src_words_seq = src_words_seq.cuda()
             src_words_mask = src_words_mask.cuda()
             trg_words_seq = trg_words_seq.cuda()
             src_chars_seq = src_chars_seq.cuda()
-            adj = adj.cuda()
+            # adj = adj.cuda()
             positional_seq = positional_seq.cuda()
 
         src_words_seq = autograd.Variable(src_words_seq)
         src_words_mask = autograd.Variable(src_words_mask)
         trg_words_seq = autograd.Variable(trg_words_seq)
         src_chars_seq = autograd.Variable(src_chars_seq)
-        adj = autograd.Variable(adj)
+        # adj = autograd.Variable(adj)
         positional_seq = autograd.Variable(positional_seq)
 
         with torch.no_grad():
             if model_id == 1:
                 outputs = model(src_words_seq, src_words_mask, src_chars_seq, positional_seq, trg_words_seq,
-                                max_trg_len, adj, None, None, False)
+                                max_trg_len,  None, None, False)
 
         rel += list(outputs[0].data.cpu().numpy())
         arg1s += list(outputs[1].data.cpu().numpy())
@@ -1094,7 +1094,7 @@ def train_model(model_id, train_samples, dev_samples, best_model_file):
             src_words_mask = torch.from_numpy(cur_samples_input['src_words_mask'].astype('uint8'))
             trg_words_seq = torch.from_numpy(cur_samples_input['decoder_input'].astype('long'))
             src_chars_seq = torch.from_numpy(cur_samples_input['src_chars'].astype('long'))
-            adj = torch.from_numpy(cur_samples_input['adj'].astype('float32'))
+            # adj = torch.from_numpy(cur_samples_input['adj'].astype('float32'))
 
             rel = torch.from_numpy(cur_samples_input['rel'].astype('long'))
             arg1s = torch.from_numpy(cur_samples_input['arg1_start'].astype('long'))
@@ -1110,7 +1110,7 @@ def train_model(model_id, train_samples, dev_samples, best_model_file):
                 src_words_mask = src_words_mask.cuda()
                 trg_words_seq = trg_words_seq.cuda()
                 src_chars_seq = src_chars_seq.cuda()
-                adj = adj.cuda()
+                # adj = adj.cuda()
                 positional_seq = positional_seq.cuda()
 
                 rel = rel.cuda()
@@ -1126,7 +1126,7 @@ def train_model(model_id, train_samples, dev_samples, best_model_file):
             src_words_mask = autograd.Variable(src_words_mask)
             trg_words_seq = autograd.Variable(trg_words_seq)
             src_chars_seq = autograd.Variable(src_chars_seq)
-            adj = autograd.Variable(adj)
+            # adj = autograd.Variable(adj)
             positional_seq = autograd.Variable(positional_seq)
 
             rel = autograd.Variable(rel)
@@ -1140,7 +1140,7 @@ def train_model(model_id, train_samples, dev_samples, best_model_file):
 
             if model_id == 1:
                 outputs = model(src_words_seq, src_words_mask, src_chars_seq, positional_seq, trg_words_seq,
-                                rel.size()[1], adj, arg1_mask, arg2_mask, True)
+                                rel.size()[1],  arg1_mask, arg2_mask, True)
 
             rel = rel.view(-1, 1).squeeze()
             arg1s = arg1s.view(-1, 1).squeeze()
@@ -1205,7 +1205,7 @@ if __name__ == "__main__":
     job_mode = sys.argv[5]
     # run = sys.argv[5]
     batch_size = 32
-    num_epoch = 30
+    num_epoch = 150
 
     max_src_len = 100
     max_trg_len = 10
@@ -1236,9 +1236,9 @@ if __name__ == "__main__":
 
     drop_rate = 0.3
     layers = 2
-    early_stop_cnt = 5
+    early_stop_cnt = 25
     sample_cnt = 0
-    Sample = recordclass("Sample", "Id SrcLen SrcWords TrgLen TrgRels TrgPointers AdjMat")
+    Sample = recordclass("Sample", "Id SrcLen SrcWords TrgLen TrgRels TrgPointers")
     rel_file = os.path.join(src_data_folder, 'relations.txt')
     relnameToIdx, relIdxToName = get_relations(rel_file)
 
@@ -1253,13 +1253,13 @@ if __name__ == "__main__":
 
         src_train_file = os.path.join(src_data_folder, 'train.sent')
         trg_train_file = os.path.join(src_data_folder, 'train.pointer')
-        adj_train_file = os.path.join(src_data_folder, 'train.dep')
-        train_data = read_data(src_train_file, trg_train_file, adj_train_file, 1)
+        # adj_train_file = os.path.join(src_data_folder, 'train.dep')
+        train_data = read_data(src_train_file, trg_train_file,  1)
 
         src_dev_file = os.path.join(src_data_folder, 'dev.sent')
         trg_dev_file = os.path.join(src_data_folder, 'dev.pointer')
-        adj_dev_file = os.path.join(src_data_folder, 'dev.dep')
-        dev_data = read_data(src_dev_file, trg_dev_file, adj_dev_file, 2)
+        # adj_dev_file = os.path.join(src_data_folder, 'dev.dep')
+        dev_data = read_data(src_dev_file, trg_dev_file,  2)
 
         custom_print('Training data size:', len(train_data))
         custom_print('Development data size:', len(dev_data))
@@ -1296,8 +1296,8 @@ if __name__ == "__main__":
         custom_print('\nTest Results\n')
         src_test_file = os.path.join(src_data_folder, 'test.sent')
         trg_test_file = os.path.join(src_data_folder, 'test.pointer')
-        adj_test_file = os.path.join(src_data_folder, 'test.dep')
-        test_data = read_data(src_test_file, trg_test_file, adj_test_file, 3)
+        # adj_test_file = os.path.join(src_data_folder, 'test.dep')
+        test_data = read_data(src_test_file, trg_test_file, 3)
 
         reader = open(os.path.join(src_data_folder, 'test.tup'))
         test_gt_lines = reader.readlines()
@@ -1317,61 +1317,3 @@ if __name__ == "__main__":
         write_test_res(test_data, test_preds, os.path.join(trg_data_folder, 'test.out'))
 
         logger.close()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
