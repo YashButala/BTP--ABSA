@@ -43,6 +43,9 @@ def load_word_embedding(embed_file, vocab):
     embed_vocab['<UNK>'] = 1
     embed_matrix.append(np.random.uniform(-0.25, 0.25, word_embed_dim))
 
+    # embed_vocab['<NO_MORE_TRIPLET>'] = 2
+    # embed_matrix.append(np.random.uniform(-0.25, 0.25, word_embed_dim))
+
     word_idx = 2
     with open(embed_file, "r") as f:
         for line in f:
@@ -64,6 +67,7 @@ def load_word_embedding(embed_file, vocab):
 
     custom_print('embed dictionary length:', len(embed_vocab))
     return embed_vocab, np.array(embed_matrix, dtype=np.float32)
+
 
 def build_tags(file1, file2):
     tk = SpaceTokenizer()
@@ -88,6 +92,7 @@ def build_tags(file1, file2):
                 pos_vocab[t[1]] = k
                 k += 1
     return pos_vocab
+
 
 def build_vocab(data, save_vocab, embedding_file,pos_vocab):
     vocab = OrderedDict()
@@ -120,21 +125,6 @@ def load_vocab(vocab_file):
     return embed_vocab, char_vocab, pos_vocab
 
 
-# def get_adj_mat(sent_len, amat):
-#     K = 5
-#     adj_mat = np.zeros((sent_len, sent_len), np.float32)
-#     for i in range(len(amat)):
-#         for j in range(len(amat)):
-#             if 0 <= amat[i][j] <= K:
-#                 adj_mat[i][j] = 1.0 / math.pow(2, amat[i][j])
-#             else:
-#                 adj_mat[i][j] = 0
-
-#     for i in range(sent_len):
-#         adj_mat[i][i] = 1
-#     return adj_mat
-
-
 def get_data(src_lines, trg_lines, datatype):
     samples = []
     uid = 1
@@ -149,14 +139,13 @@ def get_data(src_lines, trg_lines, datatype):
         if datatype == 1:
             random.shuffle(parts)
 
-        # adj_data = json.loads(adj_lines[i])
-        # adj_mat = get_adj_mat(len(src_words), adj_data['adj_mat'])
-
         for part in parts:
             elements = part.strip().split()
             trg_rels.append(relnameToIdx[elements[4]])
             trg_pointers.append((int(elements[0]), int(elements[1]), int(elements[2]), int(elements[3])))
-
+        if datatype == 1:
+            trg_rels.append(relnameToIdx['None'])
+            trg_pointers.append((-1, -1, -1, -1))
         if datatype == 1 and (len(src_words) > max_src_len or len(trg_rels) > max_trg_len):
             continue
 
@@ -197,10 +186,10 @@ def get_relations(file_name):
     reader.close()
     nameToIdx['<PAD>'] = 0
     idxToName[0] = '<PAD>'
-    # nameToIdx['<SOS>'] = 1
-    # idxToName[1] = '<SOS>'
+
     nameToIdx['None'] = 1
     idxToName[1] = 'None'
+
     idx = 2
     for line in lines:
         nameToIdx[line.strip()] = idx
@@ -210,10 +199,10 @@ def get_relations(file_name):
 
 
 def get_answer_pointers(arg1start_preds, arg1end_preds, arg2start_preds, arg2end_preds, sent_len):
+    max_ent_len = 5
     arg1_prob = -1.0
     arg1start = -1
     arg1end = -1
-    max_ent_len = 5
     for i in range(0, sent_len):
         for j in range(i, min(sent_len, i + max_ent_len)):
             if arg1start_preds[i] * arg1end_preds[j] > arg1_prob:
@@ -288,13 +277,14 @@ def get_gt_triples(src_words, rels, pointers):
     return triples
 
 
-def get_pred_triples(rel, arg1s, arg1e, arg2s, arg2e, src_words):
+def get_pred_triples(sentiment, arg1s, arg1e, arg2s, arg2e, src_words):
     triples = []
     all_triples = []
-    for i in range(0, len(rel)):
-        r = np.argmax(rel[i][1:]) + 1
-        if r == relnameToIdx['None']:
+    for i in range(0, len(sentiment)):
+        polarity = np.argmax(sentiment[i][1:]) + 1
+        if polarity == relnameToIdx['None']:
             break
+
         s1, e1, s2, e2 = get_answer_pointers(arg1s[i], arg1e[i], arg2s[i], arg2e[i], len(src_words))
         arg1 = ' '.join(src_words[s1: e1 + 1])
         arg2 = ' '.join(src_words[s2: e2 + 1])
@@ -302,7 +292,7 @@ def get_pred_triples(rel, arg1s, arg1e, arg2s, arg2e, src_words):
         arg2 = arg2.strip()
         if arg1 == arg2:
             continue
-        triplet = (arg1, arg2, relIdxToName[r])
+        triplet = (arg1, arg2, relIdxToName[polarity])
         all_triples.append(triplet)
         if not is_full_match(triplet, triples):
             triples.append(triplet)
@@ -329,16 +319,23 @@ def get_F1(data, preds):
     return pred_pos, gt_pos, correct_pos
 
 
-def write_test_res(data, preds, outfile):
+def write_test_res(src, trg, data, preds, outfile):
+    reader = open(src)
+    src_lines = reader.readlines()
     writer = open(outfile, 'w')
     for i in range(0, len(data)):
+        writer.write(src_lines[i])
+        writer.write('Expected: '+trg[i])
         pred_triples, _ = get_pred_triples(preds[0][i], preds[1][i], preds[2][i], preds[3][i], preds[4][i],
                                         data[i].SrcWords)
         pred_triples_str = []
         for pt in pred_triples:
-            pred_triples_str.append(pt[0] + ' ; ' + pt[1] + ' ; ' + pt[2])
-        writer.write(' | '.join(pred_triples_str) + '\n')
+            str_tmp = pt[0] + ' ; ' + pt[1] + ' ; ' + pt[2]
+            if str_tmp not in pred_triples_str:
+                pred_triples_str.append(str_tmp)
+        writer.write('Predicted: ' + ' | '.join(pred_triples_str) + '\n'+'\n')
     writer.close()
+    reader.close()
 
 
 def shuffle_data(data):
@@ -380,6 +377,7 @@ def get_words_index_seq(words, max_len):
         seq.append(word_vocab['<PAD>'])
     return seq
 
+
 def get_pos_index_seq(words, max_len):
     seq = list()
     tk = SpaceTokenizer()
@@ -391,11 +389,12 @@ def get_pos_index_seq(words, max_len):
         if t1 in pos_vocab:
             seq.append(pos_vocab[t1])
         else:
-            seq.append(pos_vocab['UNK'])
+            seq.append(pos_vocab['<UNK>'])
     pad_len = max_len - len(seq)
     for i in range(0, pad_len):
         seq.append(pos_vocab['<PAD>'])
     return seq
+
 
 def get_char_seq(words, max_len):
     char_seq = list()
@@ -420,15 +419,12 @@ def get_char_seq(words, max_len):
     return char_seq
 
 
-def get_relation_index_seq(rel_ids, max_len):
-    seq = list()
-    # seq.append(relnameToIdx['<SOS>'])
-    for r in rel_ids:
-        seq.append(r)
-    seq.append(relnameToIdx['None'])
+def get_opinion_terms_seq(rel_ids, max_len):
+    seq = [1 for r in rel_ids]  # 1 for valid triplets
+    seq.append(2)   # 2 for None
     pad_len = max_len + 1 - len(seq)
     for i in range(0, pad_len):
-        seq.append(relnameToIdx['<PAD>'])
+        seq.append(0)    # padding
     return seq
 
 
@@ -436,18 +432,24 @@ def get_padded_pointers(pointers, pidx, max_len):
     idx_list = []
     for p in pointers:
         idx_list.append(p[pidx])
-    pad_len = max_len + 1 - len(pointers)
+    pad_len = max_len - len(pointers)
     for i in range(0, pad_len):
         idx_list.append(-1)
     return idx_list
 
 
-def get_padded_relations(rels, max_len):
-    rel_list = []
-    for r in rels:
-        rel_list.append(r)
-    rel_list.append(relnameToIdx['None'])
+def get_generator_seq(rels, max_len):
+    rel_list = [1 for r in rels]  # 1 for any valid sentiment
+    rel_list.append(2)  # 2 for None
     pad_len = max_len + 1 - len(rel_list)
+    for i in range(0, pad_len):
+        rel_list.append(0)   # 0 for padding
+    return rel_list
+
+
+def get_sentiment_seq(rels, max_len):
+    rel_list = [r for r in rels]
+    pad_len = max_len - len(rel_list)
     for i in range(0, pad_len):
         rel_list.append(relnameToIdx['<PAD>'])
     return rel_list
@@ -463,36 +465,6 @@ def get_padded_mask(cur_len, max_len):
     return mask_seq
 
 
-def get_entity_masks(pointers, src_max, trg_max):
-    arg1_masks = []
-    arg2_masks = []
-    for p in pointers:
-        arg1_mask = [1 for i in range(src_max)]
-        arg1_mask[p[0]] = 0
-        arg1_mask[p[1]] = 0
-
-        arg2_mask = [1 for i in range(src_max)]
-        arg2_mask[p[2]] = 0
-        arg2_mask[p[3]] = 0
-
-        arg1_masks.append(arg1_mask)
-        arg2_masks.append(arg2_mask)
-
-    pad_len = trg_max + 1 -len(pointers)
-    for i in range(0, pad_len):
-        arg1_mask = [1 for i in range(src_max)]
-        arg2_mask = [1 for i in range(src_max)]
-        arg1_masks.append(arg1_mask)
-        arg2_masks.append(arg2_mask)
-    return arg1_masks, arg2_masks
-
-
-def get_positional_index(sent_len, max_len):
-    index_seq = [min(i + 1, max_positional_idx - 1) for i in range(sent_len)]
-    index_seq += [0 for i in range(max_len - sent_len)]
-    return index_seq
-
-
 def get_batch_data(cur_samples, is_training=False):
     """
     Returns the training samples and labels as numpy array
@@ -502,20 +474,14 @@ def get_batch_data(cur_samples, is_training=False):
     src_words_list = list()
     src_words_mask_list = list()
     src_char_seq = list()
-    decoder_input_list = list()
-
     src_pos_seq = list()
-
-    # adj_lst = []
-    positional_index_list = []
-
-    rel_seq = list()
+    decoder_input_list = list()
+    sentiment_seq = list()
+    generator_seq = list()
     arg1_start_seq = list()
     arg1_end_seq = list()
     arg2_start_seq = list()
     arg2_end_seq = list()
-    arg1_mask_seq = []
-    arg2_mask_seq = []
 
     for sample in cur_samples:
         src_words_list.append(get_words_index_seq(sample.SrcWords, batch_src_max_len))
@@ -523,39 +489,28 @@ def get_batch_data(cur_samples, is_training=False):
         src_char_seq.append(get_char_seq(sample.SrcWords, batch_src_max_len))
         src_pos_seq.append(get_pos_index_seq(sample.SrcWords, batch_src_max_len))
 
-        # cur_masked_adj = np.zeros((batch_src_max_len, batch_src_max_len), dtype=np.float32)
-        # cur_masked_adj[:len(sample.SrcWords), :len(sample.SrcWords)] = sample.AdjMat
-        # adj_lst.append(cur_masked_adj)
-        positional_index_list.append(get_positional_index(len(sample.SrcWords), batch_src_max_len))
-
         if is_training:
             arg1_start_seq.append(get_padded_pointers(sample.TrgPointers, 0, batch_trg_max_len))
             arg1_end_seq.append(get_padded_pointers(sample.TrgPointers, 1, batch_trg_max_len))
             arg2_start_seq.append(get_padded_pointers(sample.TrgPointers, 2, batch_trg_max_len))
             arg2_end_seq.append(get_padded_pointers(sample.TrgPointers, 3, batch_trg_max_len))
-            rel_seq.append(get_padded_relations(sample.TrgRels, batch_trg_max_len))
-            decoder_input_list.append(get_relation_index_seq(sample.TrgRels, batch_trg_max_len))
-
-            arg1_mask, arg2_mask = get_entity_masks(sample.TrgPointers, batch_src_max_len, batch_trg_max_len)
-            arg1_mask_seq.append(arg1_mask)
-            arg2_mask_seq.append(arg2_mask)
+            sentiment_seq.append(get_sentiment_seq(sample.TrgRels, batch_trg_max_len))
+            generator_seq.append(get_generator_seq(sample.TrgRels, batch_trg_max_len))
+            decoder_input_list.append(get_opinion_terms_seq(sample.TrgRels, batch_trg_max_len))
         else:
-            decoder_input_list.append(get_relation_index_seq([], 1))
+            decoder_input_list.append(get_opinion_terms_seq([], 1))
 
     return {'src_words': np.array(src_words_list, dtype=np.float32),
-            'positional_seq': np.array(positional_index_list),
             'src_words_mask': np.array(src_words_mask_list),
             'src_chars': np.array(src_char_seq),
             'decoder_input': np.array(decoder_input_list),
             'src_pos_tags': np.array(src_pos_seq),
-            # 'adj': np.array(adj_lst),
-            'rel': np.array(rel_seq),
-            'arg1_start':np.array(arg1_start_seq),
+            'sentiments': np.array(sentiment_seq),
+            'arg1_start': np.array(arg1_start_seq),
             'arg1_end': np.array(arg1_end_seq),
             'arg2_start': np.array(arg2_start_seq),
             'arg2_end': np.array(arg2_end_seq),
-            'arg1_mask': np.array(arg1_mask_seq),
-            'arg2_mask': np.array(arg2_mask_seq)}
+            'gen_seq': np.array(generator_seq)}
 
 
 class WordEmbeddings(nn.Module):
@@ -573,24 +528,17 @@ class WordEmbeddings(nn.Module):
     def weight(self):
         return self.embeddings.weight
 
+
 class POSEmbeddings(nn.Module):
     def __init__(self, tag_len,tag_dim, drop_out_rate):
         super(POSEmbeddings, self).__init__()
-        # tag_embedding_list = []
-        # for i in range(tag_len):
-        #     vector = [0] * tag_len
-        #     vector[i] = 1
-        #     tag_embedding_list += [vector]
-        # tag_embedding_matrix = np.array(tag_embedding_list)
         self.embeddings = nn.Embedding(tag_len, tag_dim, padding_idx=0)
-        # self.embeddings.weight.data.copy_(torch.from_numpy(tag_embedding_matrix))
         self.dropout = nn.Dropout(drop_out_rate)
         
     def forward(self, words_seq):
         pos_embeds = self.embeddings(words_seq)
         pos_embeds = self.dropout(pos_embeds)
         return pos_embeds
-
 
 
 class CharEmbeddings(nn.Module):
@@ -603,135 +551,6 @@ class CharEmbeddings(nn.Module):
         char_embeds = self.embeddings(words_seq)
         char_embeds = self.dropout(char_embeds)
         return char_embeds
-
-
-class Multi_Head_Self_Attention(nn.Module):
-    def __init__(self, head_cnt, h_dim):
-        super(Multi_Head_Self_Attention, self).__init__()
-        self.m = head_cnt
-        self.hidden_dim = int(h_dim/self.m)
-        self.q_head = nn.ModuleList()
-        self.k_head = nn.ModuleList()
-        self.v_head = nn.ModuleList()
-        for i in range(self.m):
-            self.q_head.append(nn.Linear(h_dim, self.hidden_dim))
-            self.k_head.append(nn.Linear(h_dim, self.hidden_dim))
-            self.v_head.append(nn.Linear(h_dim, self.hidden_dim))
-        self.w = nn.Linear(h_dim, h_dim)
-        self.w1 = nn.Linear(h_dim, h_dim)
-        self.w2 = nn.Linear(h_dim, h_dim)
-
-    def forward(self, Q, K, V):
-        att = torch.bmm(self.q_head[0](Q), self.k_head[0](K).transpose(1, 2))
-        att /= math.sqrt(self.hidden_dim)
-        att = F.softmax(att, dim=-1)
-        sent = torch.bmm(att, self.v_head[0](V))
-        for i in range(1, self.m):
-            att = torch.bmm(self.q_head[i](Q), self.k_head[i](K).transpose(1, 2))
-            att /= math.sqrt(self.hidden_dim)
-            att = F.softmax(att, dim=-1)
-            cur_sent = torch.bmm(att, self.v_head[i](V))
-            sent = torch.cat((sent, cur_sent), -1)
-        sent = self.w(sent)
-        sent = nn.LayerNorm(sent.size()[1:], elementwise_affine=False)(sent + Q)
-        lin_sent = self.w2(nn.ReLU()(self.w1(sent)))
-        sent = nn.LayerNorm(sent.size()[1:], elementwise_affine=False)(sent + lin_sent)
-        return sent
-
-
-class Multi_Head_Attentive_Sent(nn.Module):
-    def __init__(self, head_cnt, h_dim):
-        super(Multi_Head_Attentive_Sent, self).__init__()
-        self.m = head_cnt
-        self.hidden_dim = int(h_dim/self.m)
-        self.q_head = nn.ModuleList()
-        self.k_head = nn.ModuleList()
-        self.v_head = nn.ModuleList()
-        for i in range(self.m):
-            self.q_head.append(nn.Linear(h_dim, self.hidden_dim))
-            self.k_head.append(nn.Linear(h_dim, self.hidden_dim))
-            self.v_head.append(nn.Linear(h_dim, self.hidden_dim))
-        self.w = nn.Linear(h_dim, h_dim)
-
-    def forward(self, enc_hs, arg, src_mask):
-        att = torch.bmm(self.q_head[0](enc_hs), self.k_head[0](arg).unsqueeze(2)).squeeze()
-        att /= math.sqrt(self.hidden_dim)
-        att.data.masked_fill_(src_mask.data, -float('inf'))
-        att = F.softmax(att, dim=-1)
-        sent = torch.bmm(att.unsqueeze(1), self.v_head[0](enc_hs)).squeeze()
-        for i in range(1, self.m):
-            att = torch.bmm(self.q_head[i](enc_hs), self.k_head[i](arg).unsqueeze(2)).squeeze()
-            att /= math.sqrt(self.hidden_dim)
-            att.data.masked_fill_(src_mask.data, -float('inf'))
-            att = F.softmax(att, dim=-1)
-            cur_sent = torch.bmm(att.unsqueeze(1), self.v_head[i](enc_hs)).squeeze()
-            sent = torch.cat((sent, cur_sent), -1)
-        sent = self.w(sent)
-        return sent
-
-
-def multi_head_pooling(h, mask, pool_type='max'):
-    if pool_type == 'max':
-        h.data.masked_fill_(mask.unsqueeze(2).data, -float('inf'))
-        pooled_h = torch.max(h, 1)[0]
-    else:
-        h.data.masked_fill_(mask.unsqueeze(2).data, 0)
-        pooled_h = torch.max(h, 1)[0]
-    return pooled_h
-
-
-class Multi_Factor_Attention(nn.Module):
-    def __init__(self, factor_cnt, in_dim, out_dim):
-        self.drop_rate = drop_rate
-        super(Multi_Factor_Attention, self).__init__()
-        self.m = factor_cnt
-        self.layers = nn.ModuleList()
-        for i in range(self.m):
-            self.layers.append(nn.Linear(in_dim, out_dim))
-        self.w = nn.Linear(2 * in_dim, out_dim)
-        self.dropout = nn.Dropout(self.drop_rate)
-
-    def forward(self, enc_hs, src_mask, arg1, arg2):
-        arg = torch.tanh(self.w(torch.cat((arg1, arg2), -1)))
-        att = torch.bmm(torch.tanh(self.layers[0](enc_hs)), arg.unsqueeze(2)).squeeze()
-        att.data.masked_fill_(src_mask.data, -float('inf'))
-        att = F.softmax(att, dim=-1).unsqueeze(1)
-        for i in range(1, self.m):
-            cur_att = torch.bmm(torch.tanh(self.layers[i](enc_hs)), arg.unsqueeze(2)).squeeze()
-            cur_att.data.masked_fill_(src_mask.data, -float('inf'))
-            cur_att = F.softmax(cur_att, dim=-1).unsqueeze(1)
-            att = torch.cat((att, cur_att), 1)
-        att = torch.max(att, 1)[0].squeeze()
-        sent = torch.bmm(att.unsqueeze(1), enc_hs).squeeze()
-        return sent
-
-
-class GCN(nn.Module):
-    def __init__(self, num_layers, in_dim, out_dim):
-        self.drop_rate = drop_rate
-        super(GCN, self).__init__()
-        self.gcn_num_layers = num_layers
-        self.gcn_layers = nn.ModuleList()
-        for i in range(self.gcn_num_layers):
-            self.gcn_layers.append(nn.Linear(in_dim, out_dim))
-        self.W = nn.Linear(in_dim, out_dim)
-        self.dropout = nn.Dropout(self.drop_rate)
-
-    def forward(self, gcn_input, adj):
-        # denom = torch.sum(adj, 2).unsqueeze(2) + 1
-        att_scores = torch.bmm(self.W(gcn_input), gcn_input.transpose(1, 2))
-        exp_att_scores = torch.exp(att_scores)
-        combined_att = adj * exp_att_scores
-        denom = torch.sum(combined_att, dim=-1) + 1
-        norm_att = combined_att / denom.unsqueeze(2)
-        for i in range(self.gcn_num_layers):
-            Ax = torch.bmm(norm_att, gcn_input)
-            AxW = self.gcn_layers[i](Ax)
-            AxW = AxW + self.gcn_layers[i](gcn_input)
-            # AxW /= denom
-            gAxW = F.relu(AxW)
-            gcn_input = self.dropout(gAxW) if i < self.gcn_num_layers - 1 else gAxW
-        return gcn_input
 
 
 class Attention(nn.Module):
@@ -763,47 +582,25 @@ class Encoder(nn.Module):
         self.drop_rate = drop_out_rate
         self.word_embeddings = WordEmbeddings(len(word_vocab), word_embed_dim, word_embed_matrix, drop_rate)
         self.char_embeddings = CharEmbeddings(len(char_vocab), char_embed_dim, drop_rate)
-        self.pos_embeddings = POSEmbeddings(tag_len,tag_dim, drop_rate)
-        # self.pos_embeddings = nn.Embedding(max_positional_idx, positional_embed_dim, padding_idx=0)
-        if enc_type == 'LSTM':
-            self.lstm = nn.LSTM(self.input_dim, self.hidden_dim, self.layers, batch_first=True,
+        self.pos_embeddings = POSEmbeddings(tag_len, tag_dim, drop_rate)
+        self.lstm = nn.LSTM(self.input_dim, self.hidden_dim, self.layers, batch_first=True,
                                 bidirectional=self.is_bidirectional)
-        elif enc_type == 'GCN':
-            self.reduce_dim = nn.Linear(self.input_dim, 2 * self.hidden_dim)
-            self.gcn = GCN(gcn_num_layers, 2* self.hidden_dim, 2 * self.hidden_dim)
-        else:
-            self.lstm = nn.LSTM(self.input_dim, self.hidden_dim, self.layers, batch_first=True,
-                                bidirectional=self.is_bidirectional)
-            self.gcn = GCN(gcn_num_layers, 2 * self.hidden_dim, 2 * self.hidden_dim)
+
         self.dropout = nn.Dropout(self.drop_rate)
         self.conv1d = nn.Conv1d(char_embed_dim, char_feature_size, conv_filter_size)
         self.max_pool = nn.MaxPool1d(max_word_len + conv_filter_size - 1, max_word_len + conv_filter_size - 1)
-        # self.mhc = 3
-        # self.mha = Multi_Head_Self_Attention(self.mhc, 2 * self.hidden_dim)
 
-    def forward(self, words, src_pos_seq,chars, pos_seq,  is_training=False):
+    def forward(self, words, pos_tags, chars, is_training=False):
         src_word_embeds = self.word_embeddings(words)
-        # pos_embeds = self.dropout(self.pos_embeddings(pos_seq))
         char_embeds = self.char_embeddings(chars)
         char_embeds = char_embeds.permute(0, 2, 1)
 
         char_feature = torch.tanh(self.max_pool(self.conv1d(char_embeds)))
         char_feature = char_feature.permute(0, 2, 1)
-        src_pos_embeds = self.pos_embeddings(src_pos_seq) 
+        src_pos_embeds = self.pos_embeddings(pos_tags)
 
-        words_input = torch.cat((src_word_embeds,src_pos_embeds, char_feature), -1)
-        if enc_type == 'LSTM':
-            outputs, hc = self.lstm(words_input)
-        elif enc_type == 'GCN':
-            outputs = self.reduce_dim(words_input)
-            outputs = self.gcn(outputs, adj)
-        else:
-            outputs, hc = self.lstm(words_input)
-            outputs = self.dropout(outputs)
-            outputs = self.gcn(outputs, adj)
-
-        # outputs += pos_embeds
-        # outputs = self.mha(outputs, outputs, outputs)
+        words_input = torch.cat((src_word_embeds, src_pos_embeds, char_feature), -1)
+        outputs, hc = self.lstm(words_input)
         outputs = self.dropout(outputs)
         return outputs
 
@@ -816,7 +613,9 @@ class Decoder(nn.Module):
         self.layers = layers
         self.drop_rate = drop_out_rate
         self.max_length = max_length
-
+        # self.pos_embeddings = POSEmbeddings(tag_len, tag_dim, drop_rate)
+        self.dropout = nn.Dropout(self.drop_rate)
+        self.w = nn.Linear(8 * self.input_dim, self.input_dim)
         if att_type == 0:
             self.attention = Attention(input_dim)
             self.lstm = nn.LSTMCell(10 * self.input_dim, self.hidden_dim)
@@ -828,23 +627,21 @@ class Decoder(nn.Module):
             # self.w = nn.Linear(9 * self.input_dim, self.input_dim)
             self.attention1 = Attention(input_dim)
             self.attention2 = Attention(input_dim)
-            self.lstm = nn.LSTMCell(11 * self.input_dim, self.hidden_dim)
+            self.lstm = nn.LSTMCell(8 * self.input_dim + 2 * enc_hidden_size, self.hidden_dim)
 
-        self.e1_pointer_lstm = nn.LSTM(2 * self.input_dim, self.input_dim, 1, batch_first=True,
+        self.e1_pointer_lstm = nn.LSTM(4 * self.input_dim, self.input_dim, 1, batch_first=True,
                                        bidirectional=True)
-        self.e2_pointer_lstm = nn.LSTM(4 * self.input_dim, self.input_dim, 1, batch_first=True,
+        self.e2_pointer_lstm = nn.LSTM(2 * self.input_dim, self.input_dim, 1, batch_first=True,
                                        bidirectional=True)
 
         self.arg1s_lin = nn.Linear(2 * self.input_dim, 1)
         self.arg1e_lin = nn.Linear(2 * self.input_dim, 1)
         self.arg2s_lin = nn.Linear(2 * self.input_dim, 1)
         self.arg2e_lin = nn.Linear(2 * self.input_dim, 1)
-        self.rel_lin = nn.Linear(9 * self.input_dim, len(relnameToIdx))
-        self.dropout = nn.Dropout(self.drop_rate)
-        self.w = nn.Linear(9 * self.input_dim, self.input_dim)
+        # self.seq_gen_lin = nn.Linear(self.hidden_dim, 3)
+        self.sentiment_lin = nn.Linear(self.hidden_dim + 8 * self.input_dim, len(relnameToIdx))
 
-    def forward(self, y_prev, prev_tuples, h_prev, enc_hs, src_mask, arg1, arg2, arg1_mask, arg2_mask,
-                is_training=False):
+    def forward(self, prev_tuples, h_prev, enc_hs, src_mask, is_training=False):
         src_time_steps = enc_hs.size()[1]
 
         if att_type == 0:
@@ -867,16 +664,13 @@ class Decoder(nn.Module):
         hidden, cell_state = self.lstm(s_cur, h_prev)
         hidden = self.dropout(hidden)
 
-        if use_hadamard:
-            enc_hs = enc_hs * attn_weights.unsqueeze(2)
-
-        e1_pointer_lstm_input = torch.cat((enc_hs, hidden.unsqueeze(1).repeat(1, src_time_steps, 1)), 2)
-        e1_pointer_lstm_out, phc = self.e1_pointer_lstm(e1_pointer_lstm_input)
-        e1_pointer_lstm_out = self.dropout(e1_pointer_lstm_out)
-
-        e2_pointer_lstm_input = torch.cat((e1_pointer_lstm_input, e1_pointer_lstm_out), 2)
+        e2_pointer_lstm_input = torch.cat((enc_hs, hidden.unsqueeze(1).repeat(1, src_time_steps, 1)), 2)
         e2_pointer_lstm_out, phc = self.e2_pointer_lstm(e2_pointer_lstm_input)
         e2_pointer_lstm_out = self.dropout(e2_pointer_lstm_out)
+
+        e1_pointer_lstm_input = torch.cat((e2_pointer_lstm_input, e2_pointer_lstm_out), 2)
+        e1_pointer_lstm_out, phc = self.e1_pointer_lstm(e1_pointer_lstm_input)
+        e1_pointer_lstm_out = self.dropout(e1_pointer_lstm_out)
 
         arg1s = self.arg1s_lin(e1_pointer_lstm_out).squeeze()
         arg1s.data.masked_fill_(src_mask.data, -float('inf'))
@@ -904,49 +698,27 @@ class Decoder(nn.Module):
         arg2ev = torch.bmm(arg2sweights.unsqueeze(1), e2_pointer_lstm_out).squeeze()
         arg2 = self.dropout(torch.cat((arg2sv, arg2ev), -1))
 
-        # enc_hs = self.mha(enc_hs, enc_hs, enc_hs)
-        # sent1 = self.mha1(enc_hs, arg1, src_mask)
-        # sent2 = self.mha2(enc_hs, arg2, src_mask)
-
-        # if is_training:
-        #     # arg1 = self.dropout(multi_head_pooling(mh_hid, arg1_mask, 'sum'))
-        #     # arg2 = self.dropout(multi_head_pooling(mh_hid, arg2_mask, 'sum'))
-        #
-        #     # src_mask = src_mask + arg1_mask.eq(0) + arg2_mask.eq(0)
-        #     # src_mask = src_mask.eq(0).eq(0)
-        #     sent = self.dropout(multi_head_pooling(mh_hid, src_mask, 'max'))
-        # else:
-        #     arg1_one_hot = F.gumbel_softmax(arg1s).byte() + F.gumbel_softmax(arg1e).byte()
-        #     arg2_one_hot = F.gumbel_softmax(arg2s).byte() + F.gumbel_softmax(arg2e).byte()
-        #     # arg1_mask = arg1_one_hot.eq(0)
-        #     # arg2_mask = arg2_one_hot.eq(0)
-        #
-        #     # arg1 = self.dropout(multi_head_pooling(mh_hid, arg1_mask, 'sum'))
-        #     # arg2 = self.dropout(multi_head_pooling(mh_hid, arg2_mask, 'sum'))
-        #
-        #     # src_mask = src_mask + arg1_one_hot + arg2_one_hot
-        #     # src_mask = src_mask.eq(0).eq(0)
-        #     sent = self.dropout(multi_head_pooling(mh_hid, src_mask, 'max'))
-
-        rel = self.rel_lin(torch.cat((hidden, arg1, arg2), -1))
+        sentiment = self.sentiment_lin(torch.cat((hidden, arg1, arg2), -1))
+        # seq_gen = self.seq_gen_lin(hidden)
 
         if is_training:
             arg1s = F.log_softmax(arg1s, dim=-1)
             arg1e = F.log_softmax(arg1e, dim=-1)
             arg2s = F.log_softmax(arg2s, dim=-1)
             arg2e = F.log_softmax(arg2e, dim=-1)
-            rel = F.log_softmax(rel, dim=-1)
-
-            return rel.unsqueeze(1), arg1s.unsqueeze(1), arg1e.unsqueeze(1), arg2s.unsqueeze(1), \
-                arg2e.unsqueeze(1), (hidden, cell_state), arg1, arg2
+            sentiment = F.log_softmax(sentiment, dim=-1)
+            # seq_gen = F.log_softmax(seq_gen, dim=-1)
+            return sentiment.unsqueeze(1), arg1s.unsqueeze(1), arg1e.unsqueeze(1), arg2s.unsqueeze(1), \
+                   arg2e.unsqueeze(1), (hidden, cell_state), arg1, arg2
         else:
             arg1s = F.softmax(arg1s, dim=-1)
             arg1e = F.softmax(arg1e, dim=-1)
             arg2s = F.softmax(arg2s, dim=-1)
             arg2e = F.softmax(arg2e, dim=-1)
-            rel = F.softmax(rel, dim=-1)
-            return rel.unsqueeze(1), arg1s.unsqueeze(1), arg1e.unsqueeze(1), arg2s.unsqueeze(1), arg2e.unsqueeze(1), \
-                   (hidden, cell_state), arg1, arg2
+            sentiment = F.softmax(sentiment, dim=-1)
+            # seq_gen = F.softmax(seq_gen, dim=-1)
+            return sentiment.unsqueeze(1), arg1s.unsqueeze(1), arg1e.unsqueeze(1), arg2s.unsqueeze(1), \
+                   arg2e.unsqueeze(1), (hidden, cell_state), arg1, arg2
 
 
 class Seq2SeqModel(nn.Module):
@@ -954,37 +726,31 @@ class Seq2SeqModel(nn.Module):
         super(Seq2SeqModel, self).__init__()
         self.encoder = Encoder(enc_inp_size, int(enc_hidden_size/2), 1, True, drop_rate)
         self.decoder = Decoder(dec_inp_size, dec_hidden_size, 1, drop_rate, max_trg_len)
-        self.relation_embeddings = nn.Embedding(len(relnameToIdx), word_embed_dim)
-        # self.w = nn.Linear(10 * dec_inp_size, dec_inp_size)
         self.dropout = nn.Dropout(drop_rate)
 
-    def forward(self, src_words_seq,src_pos_seq, src_mask, src_char_seq, pos_seq, trg_words_seq, trg_rel_cnt, 
-                arg1_mask, arg2_mask, is_training=False):
-        if is_training:
-            trg_word_embeds = self.dropout(self.relation_embeddings(trg_words_seq))
+    def forward(self, src_words_seq, src_pos_tags, src_mask, src_char_seq, trg_words_seq, trg_rel_cnt,
+                is_training=False):
         batch_len = src_words_seq.size()[0]
         src_time_steps = src_words_seq.size()[1]
         time_steps = trg_rel_cnt
 
-        enc_hs = self.encoder(src_words_seq, src_pos_seq ,src_char_seq, pos_seq, is_training)
+        enc_hs = self.encoder(src_words_seq, src_pos_tags, src_char_seq, is_training)
 
         h0 = autograd.Variable(torch.FloatTensor(torch.zeros(batch_len, dec_hidden_size))).cuda()
         c0 = autograd.Variable(torch.FloatTensor(torch.zeros(batch_len, dec_hidden_size))).cuda()
         dec_hid = (h0, c0)
 
-        dec_inp = autograd.Variable(torch.FloatTensor(torch.zeros(batch_len, dec_hidden_size))).cuda()
-        arg1 = autograd.Variable(torch.FloatTensor(torch.zeros(batch_len, 4 * dec_hidden_size))).cuda()
-        arg2 = autograd.Variable(torch.FloatTensor(torch.zeros(batch_len, 4 * dec_hidden_size))).cuda()
+        # dec_inp = autograd.Variable(torch.FloatTensor(torch.zeros(batch_len, dec_hidden_size))).cuda()
+        arg1 = autograd.Variable(torch.FloatTensor(torch.zeros(batch_len, 4 * dec_inp_size))).cuda()
+        arg2 = autograd.Variable(torch.FloatTensor(torch.zeros(batch_len, 4 * dec_inp_size))).cuda()
 
-        prev_tuples = torch.cat((arg1, arg2, dec_inp), -1)
+        prev_tuples = torch.cat((arg1, arg2), -1)
 
         if is_training:
-            dec_outs = self.decoder(dec_inp, prev_tuples, dec_hid, enc_hs, src_mask, arg1, arg2,
-                                    arg1_mask[:, 0, :].squeeze(), arg2_mask[:, 0, :].squeeze(), is_training)
+            dec_outs = self.decoder(prev_tuples, dec_hid, enc_hs, src_mask, is_training)
         else:
-            dec_outs = self.decoder(dec_inp, prev_tuples, dec_hid, enc_hs, src_mask, arg1, arg2, None, None,
-                                    is_training)
-        rel = dec_outs[0]
+            dec_outs = self.decoder(prev_tuples, dec_hid, enc_hs, src_mask, is_training)
+        sentiment = dec_outs[0]
         arg1s = dec_outs[1]
         arg1e = dec_outs[2]
         arg2s = dec_outs[3]
@@ -992,23 +758,17 @@ class Seq2SeqModel(nn.Module):
         dec_hid = dec_outs[5]
         arg1 = dec_outs[6]
         arg2 = dec_outs[7]
-
-        topv, topi = rel[:, :, 1:].topk(1)
-        topi = torch.add(topi, 1)
+        # seq_gen = dec_outs[8]
 
         for t in range(1, time_steps):
             if is_training:
-                dec_inp = trg_word_embeds[:, t - 1, :].squeeze()
-                prev_tuples = torch.cat((arg1, arg2, dec_inp), -1) + prev_tuples
-                dec_outs = self.decoder(dec_inp, prev_tuples, dec_hid, enc_hs, src_mask, arg1, arg2,
-                                        arg1_mask[:, t, :].squeeze(), arg2_mask[:, t, :].squeeze(), is_training)
+                prev_tuples = torch.cat((arg1, arg2), -1) + prev_tuples
+                dec_outs = self.decoder(prev_tuples/(t+1), dec_hid, enc_hs, src_mask, is_training)
             else:
-                dec_inp = self.relation_embeddings(topi.squeeze().detach()).squeeze()
-                prev_tuples = torch.cat((arg1, arg2, dec_inp), -1) + prev_tuples
-                dec_outs = self.decoder(dec_inp, prev_tuples, dec_hid, enc_hs, src_mask, arg1, arg2, None, None,
-                                        is_training)
+                prev_tuples = torch.cat((arg1, arg2), -1) + prev_tuples
+                dec_outs = self.decoder(prev_tuples/(t+1), dec_hid, enc_hs, src_mask, is_training)
 
-            cur_rel = dec_outs[0]
+            cur_sentiment = dec_outs[0]
             cur_arg1s = dec_outs[1]
             cur_arg1e = dec_outs[2]
             cur_arg2s = dec_outs[3]
@@ -1016,23 +776,23 @@ class Seq2SeqModel(nn.Module):
             dec_hid = dec_outs[5]
             arg1 = dec_outs[6]
             arg2 = dec_outs[7]
+            # cur_seq = dec_outs[8]
 
-            rel = torch.cat((rel, cur_rel), 1)
+            sentiment = torch.cat((sentiment, cur_sentiment), 1)
+            # seq_gen = torch.cat((seq_gen, cur_seq), 1)
             arg1s = torch.cat((arg1s, cur_arg1s), 1)
             arg1e = torch.cat((arg1e, cur_arg1e), 1)
             arg2s = torch.cat((arg2s, cur_arg2s), 1)
             arg2e = torch.cat((arg2e, cur_arg2e), 1)
 
-            topv, topi = cur_rel[:, :, 1:].topk(1)
-            topi = torch.add(topi, 1)
-
         if is_training:
-            rel = rel.view(-1, len(relnameToIdx))
+            # seq_gen = seq_gen.view(-1, 3)
+            sentiment = sentiment.view(-1, len(relnameToIdx))
             arg1s = arg1s.view(-1, src_time_steps)
             arg1e = arg1e.view(-1, src_time_steps)
             arg2s = arg2s.view(-1, src_time_steps)
             arg2e = arg2e.view(-1, src_time_steps)
-        return rel, arg1s, arg1e, arg2s, arg2e
+        return sentiment, arg1s, arg1e, arg2s, arg2e
 
 
 def get_model(model_id):
@@ -1055,7 +815,8 @@ def predict(samples, model, model_id):
     if len(samples) - batch_size * (batch_count - 1) == 1:
         move_last_batch = True
         batch_count -= 1
-    rel = list()
+    # seq_gen = list()
+    sentiment = list()
     arg1s = list()
     arg1e = list()
     arg2s = list()
@@ -1073,36 +834,31 @@ def predict(samples, model, model_id):
         cur_samples_input = get_batch_data(cur_batch, False)
 
         src_words_seq = torch.from_numpy(cur_samples_input['src_words'].astype('long'))
-        positional_seq = torch.from_numpy(cur_samples_input['positional_seq'].astype('long'))
-        src_words_mask = torch.from_numpy(cur_samples_input['src_words_mask'].astype('uint8'))
+        src_words_mask = torch.from_numpy(cur_samples_input['src_words_mask'].astype('bool'))
         trg_words_seq = torch.from_numpy(cur_samples_input['decoder_input'].astype('long'))
         src_chars_seq = torch.from_numpy(cur_samples_input['src_chars'].astype('long'))
         src_pos_tags = torch.from_numpy(cur_samples_input['src_pos_tags'].astype('long'))
-        # adj = torch.from_numpy(cur_samples_input['adj'].astype('float32'))
 
         if torch.cuda.is_available():
             src_words_seq = src_words_seq.cuda()
             src_words_mask = src_words_mask.cuda()
             trg_words_seq = trg_words_seq.cuda()
             src_chars_seq = src_chars_seq.cuda()
-            # adj = adj.cuda()
             src_pos_tags = src_pos_tags.cuda()
-            positional_seq = positional_seq.cuda()
 
         src_words_seq = autograd.Variable(src_words_seq)
         src_words_mask = autograd.Variable(src_words_mask)
         trg_words_seq = autograd.Variable(trg_words_seq)
         src_chars_seq = autograd.Variable(src_chars_seq)
         src_pos_tags = autograd.Variable(src_pos_tags)
-        # adj = autograd.Variable(adj)
-        positional_seq = autograd.Variable(positional_seq)
 
         with torch.no_grad():
             if model_id == 1:
-                outputs = model(src_words_seq, src_pos_tags,src_words_mask, src_chars_seq, positional_seq, trg_words_seq,
-                                max_trg_len,  None, None, False)
+                outputs = model(src_words_seq, src_pos_tags, src_words_mask, src_chars_seq, trg_words_seq,
+                                max_trg_len, False)
 
-        rel += list(outputs[0].data.cpu().numpy())
+        # seq_gen += list(outputs[0].data.cpu().numpy())
+        sentiment += list(outputs[0].data.cpu().numpy())
         arg1s += list(outputs[1].data.cpu().numpy())
         arg1e += list(outputs[2].data.cpu().numpy())
         arg2s += list(outputs[3].data.cpu().numpy())
@@ -1111,7 +867,7 @@ def predict(samples, model, model_id):
 
     end_time = datetime.datetime.now()
     custom_print('Prediction time:', end_time - start_time)
-    return rel, arg1s, arg1e, arg2s, arg2e
+    return sentiment, arg1s, arg1e, arg2s, arg2e
 
 
 def train_model(model_id, train_samples, dev_samples, best_model_file):
@@ -1163,70 +919,59 @@ def train_model(model_id, train_samples, dev_samples, best_model_file):
             cur_samples_input = get_batch_data(cur_batch, True)
 
             src_words_seq = torch.from_numpy(cur_samples_input['src_words'].astype('long'))
-            positional_seq = torch.from_numpy(cur_samples_input['positional_seq'].astype('long'))
-            src_words_mask = torch.from_numpy(cur_samples_input['src_words_mask'].astype('uint8'))
+            src_words_mask = torch.from_numpy(cur_samples_input['src_words_mask'].astype('bool'))
             trg_words_seq = torch.from_numpy(cur_samples_input['decoder_input'].astype('long'))
             src_chars_seq = torch.from_numpy(cur_samples_input['src_chars'].astype('long'))
             src_pos_tags = torch.from_numpy(cur_samples_input['src_pos_tags'].astype('long'))
-            # adj = torch.from_numpy(cur_samples_input['adj'].astype('float32'))
 
-            rel = torch.from_numpy(cur_samples_input['rel'].astype('long'))
+            gen_seq = torch.from_numpy(cur_samples_input['gen_seq'].astype('long'))
+            sentiments = torch.from_numpy(cur_samples_input['sentiments'].astype('long'))
             arg1s = torch.from_numpy(cur_samples_input['arg1_start'].astype('long'))
             arg1e = torch.from_numpy(cur_samples_input['arg1_end'].astype('long'))
             arg2s = torch.from_numpy(cur_samples_input['arg2_start'].astype('long'))
             arg2e = torch.from_numpy(cur_samples_input['arg2_end'].astype('long'))
-
-            arg1_mask = torch.from_numpy(cur_samples_input['arg1_mask'].astype('uint8'))
-            arg2_mask = torch.from_numpy(cur_samples_input['arg2_mask'].astype('uint8'))
 
             if torch.cuda.is_available():
                 src_words_seq = src_words_seq.cuda()
                 src_words_mask = src_words_mask.cuda()
                 trg_words_seq = trg_words_seq.cuda()
                 src_chars_seq = src_chars_seq.cuda()
-                # adj = adj.cuda()
                 src_pos_tags = src_pos_tags.cuda()
-                positional_seq = positional_seq.cuda()
 
-                rel = rel.cuda()
+                gen_seq = gen_seq.cuda()
+                sentiments = sentiments.cuda()
                 arg1s = arg1s.cuda()
                 arg1e = arg1e.cuda()
                 arg2s = arg2s.cuda()
                 arg2e = arg2e.cuda()
-
-                arg1_mask = arg1_mask.cuda()
-                arg2_mask = arg2_mask.cuda()
 
             src_words_seq = autograd.Variable(src_words_seq)
             src_words_mask = autograd.Variable(src_words_mask)
             trg_words_seq = autograd.Variable(trg_words_seq)
             src_chars_seq = autograd.Variable(src_chars_seq)
             src_pos_tags = autograd.Variable(src_pos_tags)
-            # adj = autograd.Variable(adj)
-            positional_seq = autograd.Variable(positional_seq)
 
-            rel = autograd.Variable(rel)
+            gen_seq = autograd.Variable(gen_seq)
+            sentiments = autograd.Variable(sentiments)
             arg1s = autograd.Variable(arg1s)
             arg1e = autograd.Variable(arg1e)
             arg2s = autograd.Variable(arg2s)
             arg2e = autograd.Variable(arg2e)
 
-            arg1_mask = autograd.Variable(arg1_mask)
-            arg2_mask = autograd.Variable(arg2_mask)
-
             if model_id == 1:
-                outputs = model(src_words_seq,src_pos_tags, src_words_mask, src_chars_seq, positional_seq, trg_words_seq,
-                                rel.size()[1],  arg1_mask, arg2_mask, True)
+                outputs = model(src_words_seq, src_pos_tags, src_words_mask, src_chars_seq, trg_words_seq,
+                                sentiments.size()[1], True)
 
-            rel = rel.view(-1, 1).squeeze()
+            gen_seq = gen_seq.view(-1, 1).squeeze()
+            sentiments = sentiments.view(-1, 1).squeeze()
             arg1s = arg1s.view(-1, 1).squeeze()
             arg1e = arg1e.view(-1, 1).squeeze()
             arg2s = arg2s.view(-1, 1).squeeze()
             arg2e = arg2e.view(-1, 1).squeeze()
 
-            loss = rel_criterion(outputs[0], rel) + \
-                   wf * (pointer_criterion(outputs[1], arg1s) + pointer_criterion(outputs[2], arg1e)) + \
-                   wf * (pointer_criterion(outputs[3], arg2s) + pointer_criterion(outputs[4], arg2e))
+            loss = rel_criterion(outputs[0], sentiments) + \
+                   pointer_criterion(outputs[1], arg1s) + pointer_criterion(outputs[2], arg1e) + \
+                   pointer_criterion(outputs[3], arg2s) + pointer_criterion(outputs[4], arg2e)
 
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 10.0)
@@ -1280,7 +1025,7 @@ if __name__ == "__main__":
     model_name = 1
     job_mode = sys.argv[5]
     # run = sys.argv[5]
-    batch_size = 32
+    batch_size = 4
     num_epoch = 150
 
     max_src_len = 100
@@ -1312,7 +1057,7 @@ if __name__ == "__main__":
     dec_hidden_size = dec_inp_size
     l1_type_embed_dim = 50
 
-    drop_rate = 0.3
+    drop_rate = 0.5
     layers = 2
     early_stop_cnt = 25
     sample_cnt = 0
@@ -1396,6 +1141,6 @@ if __name__ == "__main__":
         custom_print('P:', round(p, 3))
         custom_print('R:', round(r, 3))
         custom_print('F1:', round(test_acc, 3))
-        write_test_res(test_data, test_preds, os.path.join(trg_data_folder, 'test.out'))
+        write_test_res(src_test_file,test_gt_lines,test_data, test_preds, os.path.join(trg_data_folder, 'test.out'))
 
         logger.close()
