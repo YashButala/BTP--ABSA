@@ -1025,7 +1025,7 @@ if __name__ == "__main__":
     model_name = 1
     job_mode = sys.argv[5]
     # run = sys.argv[5]
-    batch_size = 4
+    batch_size = 16
     num_epoch = 150
 
     max_src_len = 100
