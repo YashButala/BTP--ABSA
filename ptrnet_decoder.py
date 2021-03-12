@@ -652,8 +652,10 @@ class Encoder(nn.Module):
         self.is_bidirectional = is_bidirectional
         self.drop_rate = drop_out_rate
         self.word_embeddings = WordEmbeddings(len(word_vocab), word_embed_dim, drop_rate)
-        self.char_embeddings = CharEmbeddings(len(char_vocab), char_embed_dim, drop_rate)
-        self.pos_embeddings = POSEmbeddings(len(pos_vocab), pos_tag_dim, drop_rate)
+        if use_char_embed:
+            self.char_embeddings = CharEmbeddings(len(char_vocab), char_embed_dim, drop_rate)
+        if use_pos_tags:
+            self.pos_embeddings = POSEmbeddings(len(pos_vocab), pos_tag_dim, drop_rate)
         if enc_type == 'LSTM':
             self.lstm = nn.LSTM(self.input_dim, self.hidden_dim, self.layers, batch_first=True,
                                 bidirectional=self.is_bidirectional)
@@ -669,9 +671,16 @@ class Encoder(nn.Module):
             adv = torch.index_select(adv.view(-1, word_embed_dim), 0,
                                      words.data.view(-1)).view(batch_len, seq_len, -1)
             src_word_embeds.data = src_word_embeds.data + adv
-        char_feature = self.char_embeddings(chars)
-        src_pos_embeds = self.pos_embeddings(pos_seq)
-        words_input = torch.cat((src_word_embeds, char_feature, src_pos_embeds), -1)
+
+        words_input = src_word_embeds
+        if use_char_embed:
+            char_feature = self.char_embeddings(chars)
+            words_input = torch.cat((words_input, char_feature), -1)
+        if use_pos_tags:
+            src_pos_embeds = self.pos_embeddings(pos_seq)
+            words_input = torch.cat((words_input, src_pos_embeds), -1)
+
+        # words_input = torch.cat((src_word_embeds, char_feature, src_pos_embeds), -1)
         outputs, hc = self.lstm(words_input)
         outputs = self.dropout(outputs)
         return outputs
@@ -709,9 +718,12 @@ class Decoder(nn.Module):
         self.arg1e_lin = nn.Linear(pointer_net_hidden_size, 1)
         self.arg2s_lin = nn.Linear(pointer_net_hidden_size, 1)
         self.arg2e_lin = nn.Linear(pointer_net_hidden_size, 1)
-        self.sent_att = Sentiment_Attention(enc_hidden_size, 2 * pointer_net_hidden_size)
-        self.rel_lin = nn.Linear(dec_hidden_size + 4 * pointer_net_hidden_size + 2 * enc_hidden_size,
-                                 len(relnameToIdx))
+        if use_sentiment_attention:
+            self.sent_att = Sentiment_Attention(enc_hidden_size, 2 * pointer_net_hidden_size)
+            self.rel_lin = nn.Linear(dec_hidden_size + 4 * pointer_net_hidden_size + 2 * enc_hidden_size,
+                                     len(relnameToIdx))
+        else:
+            self.rel_lin = nn.Linear(dec_hidden_size + 4 * pointer_net_hidden_size, len(relnameToIdx))
         self.dropout = nn.Dropout(self.drop_rate)
 
     def forward(self, prev_tuples, h_prev, enc_hs, src_mask, arg1swts, arg1ewts, arg2swts, arg2ewts,
@@ -774,10 +786,11 @@ class Decoder(nn.Module):
         arg2sv = torch.bmm(arg2sweights.unsqueeze(1), e2_pointer_lstm_out).squeeze()
         arg2ev = torch.bmm(arg2eweights.unsqueeze(1), e2_pointer_lstm_out).squeeze()
         arg2 = torch.cat((arg2sv, arg2ev), -1)
-
-        sent_ctx = self.sent_att(arg1, arg2, enc_hs, src_mask)
-        rel = self.rel_lin(self.dropout(torch.cat((hidden, arg1, arg2, sent_ctx), -1)))
-
+        if use_sentiment_attention:
+            sent_ctx = self.sent_att(arg1, arg2, enc_hs, src_mask)
+            rel = self.rel_lin(self.dropout(torch.cat((hidden, arg1, arg2, sent_ctx), -1)))
+        else:
+            rel = self.rel_lin(self.dropout(torch.cat((hidden, arg1, arg2), -1)))
         if is_training:
             pred_vec = get_vec(arg1s, arg1e, arg2s, arg2e, rel)
             arg1s = F.log_softmax(arg1s, dim=-1)
@@ -1076,26 +1089,41 @@ def train_model(model_id, train_samples, dev_samples, test_samples, best_model_f
 
             if use_vec_loss:
                 loss = loss + vec_criterion(pred_vec, trg_vec)
+
             if use_adv:
-                model.zero_grad()
-                loss.backward(retain_graph=True)
+                # loss.backward(retain_graph=True)
+                loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 10.0)
+
                 params = list(model.parameters())
                 adv = params[0].grad.data
-                adv = adv_eps * math.sqrt(adv.size()[1]) * adv / torch.norm(adv)
+                # adv = adv_eps * math.sqrt(adv.size()[1]) * adv / torch.norm(adv)
+                adv = adv_eps * adv / torch.norm(adv)
+
+                # print(torch.sum(adv))
+                optimizer.step()
+                model.zero_grad()
+                train_loss_val += loss.item()
+                # print(torch.sum(adv))
+
                 adv_outputs = model(src_words_seq, src_words_mask, src_chars_seq, src_pos_tags, trg_words_seq,
                                 trg_seq_len, arg1sweights, arg1eweights, arg2sweights, arg2eweights, adv, True)
                 adv_loss = rel_criterion(adv_outputs[0], rel) + \
                    wf * (pointer_criterion(adv_outputs[1], arg1s) + pointer_criterion(adv_outputs[2], arg1e)) + \
                    wf * (pointer_criterion(adv_outputs[3], arg2s) + pointer_criterion(adv_outputs[4], arg2e))
-                loss = loss + adv_loss
-
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 10.0)
-            if (batch_idx + 1) % update_freq == 0:
+                # loss = loss + adv_loss
+                # model.zero_grad()
+                adv_loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 10.0)
                 optimizer.step()
                 model.zero_grad()
-            train_loss_val += loss.item()
+                train_loss_val += adv_loss.item()
+            else:
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 10.0)
+                optimizer.step()
+                model.zero_grad()
+                train_loss_val += loss.item()
 
         train_loss_val /= batch_count
         if use_adv:
@@ -1154,10 +1182,16 @@ if __name__ == "__main__":
         os.mkdir(trg_data_folder)
     model_name = 1
     job_mode = sys.argv[5]
+
+    use_char_embed = True
+    use_pos_tags = True
     use_data_aug = True  # bool(int(sys.argv[6]))
+    use_sentiment_attention = True
+
+    use_adv = False  # bool(int(sys.argv[8]))
+    adv_eps = 0.01  # float(sys.argv[9])
+
     use_gold_location = False   # bool(int(sys.argv[7]))
-    use_adv = False    # bool(int(sys.argv[8]))
-    adv_eps = 0.01   # float(sys.argv[9])
     use_vec_loss = False
     # run = sys.argv[5]
     batch_size = 16
@@ -1183,7 +1217,11 @@ if __name__ == "__main__":
     max_word_len = 10
     rel_embed_dim = 25
 
-    enc_inp_size = word_embed_dim + char_feature_size + pos_tag_dim
+    enc_inp_size = word_embed_dim
+    if use_char_embed:
+        enc_inp_size += char_feature_size
+    if use_pos_tags:
+        enc_inp_size += pos_tag_dim
     enc_hidden_size = 300
     dec_inp_size = enc_hidden_size
     dec_hidden_size = dec_inp_size
