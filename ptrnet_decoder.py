@@ -51,7 +51,7 @@ def load_word_embedding(embed_file, vocab):
             if len(parts) < word_embed_dim + 1:
                 continue
             word = parts[0]
-            if word in vocab and word not in embed_vocab and vocab[word] >= word_min_freq:
+            if word in vocab:
                 vec = [np.float32(val) for val in parts[1:]]
                 embed_matrix.append(vec)
                 embed_vocab[word] = word_idx
@@ -67,18 +67,28 @@ def load_word_embedding(embed_file, vocab):
     return embed_vocab, np.array(embed_matrix, dtype=np.float32)
 
 
-def build_vocab(data, save_vocab, embedding_file):
+def build_vocab(tr_data, dv_data, ts_data, save_vocab, embedding_file):
     vocab = OrderedDict()
     char_v = OrderedDict()
     char_v['<PAD>'] = 0
     char_v['<UNK>'] = 1
     char_idx = 2
-    for d in data:
+    for d in tr_data:
         for word in d.SrcWords:
             if word not in vocab:
                 vocab[word] = 1
             else:
                 vocab[word] += 1
+
+            for c in word:
+                if c not in char_v:
+                    char_v[c] = char_idx
+                    char_idx += 1
+
+    for d in dv_data + ts_data:
+        for word in d.SrcWords:
+            if word not in vocab:
+                vocab[word] = 0
 
             for c in word:
                 if c not in char_v:
@@ -131,56 +141,76 @@ def load_vocab(vocab_file):
     return embed_vocab, char_vocab, pos_vocab
 
 
-def get_data(src_lines, trg_lines, datatype):
+def get_sample(uid, src_line, trg_line, nr_line, datatype):
+    src_words = src_line.split(' ')
+    trg_rels = []
+    trg_pointers = []
+    parts = trg_line.split('|')
+    if datatype == 1 and use_nr_triplets:
+        if len(nr_line) > 0:
+            nr_parts = nr_line.split('|')
+            random.shuffle(nr_parts)
+            nr_cnt = min(len(nr_parts), random.choice([num + 1 for num in range(max_nr_cnt)]))
+            parts += nr_parts[:nr_cnt]
+    if datatype == 1:
+        random.shuffle(parts)
+        # print(parts)
+    for part in parts:
+        elements = part.strip().split(' ')
+        trg_rels.append(relnameToIdx[elements[4]])
+        trg_pointers.append((int(elements[0]), int(elements[1]), int(elements[2]), int(elements[3])))
+
+    if datatype == 1 and (len(src_words) > max_src_len or len(trg_rels) > max_trg_len):
+        return False, None
+
+    sample = Sample(Id=uid, SrcLen=len(src_words), SrcWords=src_words, TrgLen=len(trg_rels), TrgRels=trg_rels,
+                    TrgPointers=trg_pointers)
+    return True, sample
+
+
+def get_data(src_lines, trg_lines, nr_lines, datatype):
     samples = []
     uid = 1
     for i in range(0, len(src_lines)):
         src_line = src_lines[i].strip()
         trg_line = trg_lines[i].strip()
-        src_words = src_line.split(' ')
-
-        trg_rels = []
-        trg_pointers = []
-        parts = trg_line.split('|')
-        if datatype == 1:
-            random.shuffle(parts)
-        for part in parts:
-            elements = part.strip().split()
-            trg_rels.append(relnameToIdx[elements[4]])
-            trg_pointers.append((int(elements[0]), int(elements[1]), int(elements[2]), int(elements[3])))
-
-        if datatype == 1 and (len(src_words) > max_src_len or len(trg_rels) > max_trg_len):
-            continue
-
-        sample = Sample(Id=uid, SrcLen=len(src_words), SrcWords=src_words, TrgLen=len(trg_rels), TrgRels=trg_rels,
-                        TrgPointers=trg_pointers)
-        samples.append(sample)
-        uid += 1
-
-        if use_data_aug and datatype == 1 and len(parts) > 1:
-            random.shuffle(parts)
-            for part in parts:
-                elements = part.strip().split()
-                trg_rels.append(relnameToIdx[elements[4]])
-                trg_pointers.append((int(elements[0]), int(elements[1]), int(elements[2]), int(elements[3])))
-            sample = Sample(Id=uid, SrcLen=len(src_words), SrcWords=src_words, TrgLen=len(trg_rels),
-                            TrgRels=trg_rels, TrgPointers=trg_pointers)
+        nr_line = ''
+        if datatype == 1 and use_nr_triplets:
+            nr_line = nr_lines[i].strip()
+        status, sample = get_sample(uid, src_line, trg_line, nr_line, datatype)
+        if status:
             samples.append(sample)
             uid += 1
 
+        if use_data_aug and datatype == 1:
+            parts = trg_line.split('|')
+            if len(parts) == 1:
+                continue
+            for j in range(1, 2):
+                status, aug_sample = get_sample(uid, src_line, trg_line, nr_line, datatype)
+                if status:
+                    samples.append(aug_sample)
+                    uid += 1
     return samples
 
 
-def read_data(src_file, trg_file,  datatype):
+def read_data(src_file, trg_file, nr_file, datatype):
     reader = open(src_file)
     src_lines = reader.readlines()
+    custom_print('No. of sentences:', len(src_lines))
     reader.close()
 
     reader = open(trg_file)
     trg_lines = reader.readlines()
     reader.close()
 
-    data = get_data(src_lines, trg_lines,  datatype)
+    nr_lines = []
+    if datatype == 1:
+        reader = open(nr_file)
+        nr_lines = reader.readlines()
+        reader.close()
+
+    data = get_data(src_lines, trg_lines, nr_lines, datatype)
     return data
 
 
@@ -197,6 +227,10 @@ def get_relations(file_name):
     nameToIdx['None'] = 1
     idxToName[1] = 'None'
     idx = 2
+    if use_nr_triplets:
+        nameToIdx['NR'] = 2
+        idxToName[2] = 'NR'
+        idx = 3
     for line in lines:
         nameToIdx[line.strip()] = idx
         idxToName[idx] = line.strip()
@@ -209,6 +243,7 @@ def get_answer_pointers(arg1start_preds, arg1end_preds, arg2start_preds, arg2end
     arg1start = -1
     arg1end = -1
     max_ent_len = 5
+    window = 100
     for i in range(0, sent_len):
         for j in range(i, min(sent_len, i + max_ent_len)):
             if arg1start_preds[i] * arg1end_preds[j] > arg1_prob:
@@ -219,18 +254,19 @@ def get_answer_pointers(arg1start_preds, arg1end_preds, arg2start_preds, arg2end
     arg2_prob = -1.0
     arg2start = -1
     arg2end = -1
-    for i in range(0, arg1start):
+    for i in range(max(0, arg1start - window), arg1start):
         for j in range(i, min(arg1start, i + max_ent_len)):
             if arg2start_preds[i] * arg2end_preds[j] > arg2_prob:
                 arg2_prob = arg2start_preds[i] * arg2end_preds[j]
                 arg2start = i
                 arg2end = j
-    for i in range(arg1end + 1, sent_len):
+    for i in range(arg1end + 1, min(sent_len, arg1end + window)):
         for j in range(i, min(sent_len, i + max_ent_len)):
             if arg2start_preds[i] * arg2end_preds[j] > arg2_prob:
                 arg2_prob = arg2start_preds[i] * arg2end_preds[j]
                 arg2start = i
                 arg2end = j
+    # return arg1start, arg1end, arg2start, arg2end
 
     arg2_prob1 = -1.0
     arg2start1 = -1
@@ -245,13 +281,13 @@ def get_answer_pointers(arg1start_preds, arg1end_preds, arg2start_preds, arg2end
     arg1_prob1 = -1.0
     arg1start1 = -1
     arg1end1 = -1
-    for i in range(0, arg2start1):
+    for i in range(max(0, arg2start1 - window), arg2start1):
         for j in range(i, min(arg2start1, i + max_ent_len)):
             if arg1start_preds[i] * arg1end_preds[j] > arg1_prob1:
                 arg1_prob1 = arg1start_preds[i] * arg1end_preds[j]
                 arg1start1 = i
                 arg1end1 = j
-    for i in range(arg2end1 + 1, sent_len):
+    for i in range(arg2end1 + 1, min(sent_len, arg2end1 + window)):
         for j in range(i, min(sent_len, i + max_ent_len)):
             if arg1start_preds[i] * arg1end_preds[j] > arg1_prob1:
                 arg1_prob1 = arg1start_preds[i] * arg1end_preds[j]
@@ -287,17 +323,24 @@ def get_pred_triples(rel, arg1s, arg1e, arg2s, arg2e, src_words):
     triples = []
     all_triples = []
     for i in range(0, len(rel)):
-        r = np.argmax(rel[i][1:]) + 1
-        if r == relnameToIdx['None']:
+        pred_idx = np.argmax(rel[i][1:]) + 1
+        pred_score = np.max(rel[i][1:])
+        if pred_idx == relnameToIdx['None']:
             break
+        if use_nr_triplets and pred_idx == relnameToIdx['NR']:
+            continue
+        if job_mode == 'test' and pred_score < rel_th:
+            continue
         s1, e1, s2, e2 = get_answer_pointers(arg1s[i], arg1e[i], arg2s[i], arg2e[i], len(src_words))
+        if job_mode == 'test' and abs(s1 - s2) > max_dist:
+            continue
         arg1 = ' '.join(src_words[s1: e1 + 1])
         arg2 = ' '.join(src_words[s2: e2 + 1])
         arg1 = arg1.strip()
         arg2 = arg2.strip()
         if arg1 == arg2:
             continue
-        triplet = (arg1, arg2, relIdxToName[r])
+        triplet = (arg1, arg2, relIdxToName[pred_idx], pred_score)
         all_triples.append(triplet)
         if not is_full_match(triplet, triples):
             triples.append(triplet)
@@ -335,7 +378,7 @@ def write_test_res(src, trg, data, preds, outfile):
                                         data[i].SrcWords)
         pred_triples_str = []
         for pt in pred_triples:
-            str_tmp = pt[0] + ' ; ' + pt[1] + ' ; ' + pt[2]
+            str_tmp = pt[0] + ' ; ' + pt[1] + ' ; ' + pt[2] + ' ; ' + str(pt[3])
             if str_tmp not in pred_triples_str:
                 pred_triples_str.append(str_tmp)
         writer.write('Predicted: ' + ' | '.join(pred_triples_str) + '\n'+'\n')
@@ -345,7 +388,7 @@ def write_test_res(src, trg, data, preds, outfile):
 
 def shuffle_data(data):
     custom_print(len(data))
-    data.sort(key=lambda x: x.SrcLen)
+    # data.sort(key=lambda x: x.SrcLen)
     num_batch = int(len(data) / batch_size)
     rand_idx = random.sample(range(num_batch), num_batch)
     new_data = []
@@ -491,6 +534,7 @@ def get_batch_data(cur_samples, is_training=False):
     src_char_seq = list()
     decoder_input_list = list()
     src_pos_seq = list()
+    src_loc_seq = list()
     arg1sweights = []
     arg1eweights = []
     arg2sweights = []
@@ -509,6 +553,8 @@ def get_batch_data(cur_samples, is_training=False):
         src_words_mask_list.append(get_padded_mask(sample.SrcLen, batch_src_max_len))
         src_char_seq.append(get_char_seq(sample.SrcWords, batch_src_max_len))
         src_pos_seq.append(get_pos_index_seq(sample.SrcWords, batch_src_max_len))
+        src_loc_seq.append([i+1 for i in range(len(sample.SrcWords))] +
+                           [0 for i in range(batch_src_max_len - len(sample.SrcWords))])
 
         if is_training:
             arg1_start_seq.append(get_padded_pointers(sample.TrgPointers, 0, batch_trg_max_len))
@@ -531,6 +577,7 @@ def get_batch_data(cur_samples, is_training=False):
             'src_words_mask': np.array(src_words_mask_list),
             'src_chars': np.array(src_char_seq),
             'src_pos_tags': np.array(src_pos_seq),
+            'src_loc': np.array(src_loc_seq),
             'decoder_input': np.array(decoder_input_list),
             'arg1sweights': np.array(arg1sweights),
             'arg1eweights': np.array(arg1eweights),
@@ -551,6 +598,7 @@ class WordEmbeddings(nn.Module):
         self.embeddings = nn.Embedding(vocab_size, embed_dim, padding_idx=0)
         if job_mode == 'train':
             self.embeddings.weight.data.copy_(torch.from_numpy(word_embed_matrix))
+        self.embeddings.weight.requires_grad = False
         self.dropout = nn.Dropout(drop_out_rate)
 
     def forward(self, words_seq):
@@ -591,6 +639,18 @@ class POSEmbeddings(nn.Module):
         return pos_embeds
 
 
+class LocEmbeddings(nn.Module):
+    def __init__(self, embed_size, embed_dim, drop_out_rate):
+        super(LocEmbeddings, self).__init__()
+        self.embeddings = nn.Embedding(embed_size, embed_dim, padding_idx=0)
+        self.dropout = nn.Dropout(drop_out_rate)
+
+    def forward(self, loc_seq):
+        loc_embeds = self.embeddings(loc_seq)
+        loc_embeds = self.dropout(loc_embeds)
+        return loc_embeds
+
+
 class Attention(nn.Module):
     def __init__(self, input_dim):
         super(Attention, self).__init__()
@@ -610,9 +670,9 @@ class Attention(nn.Module):
         return ctx, attn_weights
 
 
-class Sentiment_Attention(nn.Module):
+class Sentiment_Attention_(nn.Module):
     def __init__(self, enc_hid_dim, arg_dim):
-        super(Sentiment_Attention, self).__init__()
+        super(Sentiment_Attention_, self).__init__()
         self.w1 = nn.Linear(enc_hid_dim + arg_dim, 1)
         self.w2 = nn.Linear(enc_hid_dim + arg_dim, 1)
 
@@ -625,6 +685,26 @@ class Sentiment_Attention(nn.Module):
 
         ctx_arg2 = torch.cat((enc_hs, arg2.unsqueeze(1).repeat(1, enc_hs.size()[1], 1)), -1)
         ctx_arg2_att = self.w2(ctx_arg2).squeeze()
+        ctx_arg2_att.data.masked_fill_(src_mask.data, -float('inf'))
+        ctx_arg2_att = F.softmax(ctx_arg2_att, dim=-1)
+        ctx2 = torch.bmm(ctx_arg2_att.unsqueeze(1), enc_hs).squeeze()
+
+        return torch.cat((ctx1, ctx2), -1)
+
+
+class Sentiment_Attention(nn.Module):
+    def __init__(self, enc_hid_dim, arg_dim):
+        super(Sentiment_Attention, self).__init__()
+        self.w1 = nn.Linear(enc_hid_dim, arg_dim)
+        self.w2 = nn.Linear(enc_hid_dim, arg_dim)
+
+    def forward(self, arg1, arg2, enc_hs, src_mask):
+        ctx_arg1_att = torch.bmm(torch.tanh(self.w1(enc_hs)), arg1.unsqueeze(2)).squeeze()
+        ctx_arg1_att.data.masked_fill_(src_mask.data, -float('inf'))
+        ctx_arg1_att = F.softmax(ctx_arg1_att, dim=-1)
+        ctx1 = torch.bmm(ctx_arg1_att.unsqueeze(1), enc_hs).squeeze()
+
+        ctx_arg2_att = torch.bmm(torch.tanh(self.w2(enc_hs)), arg2.unsqueeze(2)).squeeze()
         ctx_arg2_att.data.masked_fill_(src_mask.data, -float('inf'))
         ctx_arg2_att = F.softmax(ctx_arg2_att, dim=-1)
         ctx2 = torch.bmm(ctx_arg2_att.unsqueeze(1), enc_hs).squeeze()
@@ -656,13 +736,15 @@ class Encoder(nn.Module):
             self.char_embeddings = CharEmbeddings(len(char_vocab), char_embed_dim, drop_rate)
         if use_pos_tags:
             self.pos_embeddings = POSEmbeddings(len(pos_vocab), pos_tag_dim, drop_rate)
+        if use_loc_embed:
+            self.loc_embeddings = LocEmbeddings(max_src_len + 1, loc_embed_dim, drop_rate)
         if enc_type == 'LSTM':
             self.lstm = nn.LSTM(self.input_dim, self.hidden_dim, self.layers, batch_first=True,
-                                bidirectional=self.is_bidirectional)
+                                bidirectional=self.is_bidirectional, dropout=drop_out_rate)
 
         self.dropout = nn.Dropout(self.drop_rate)
 
-    def forward(self, words, chars, pos_seq, adv=None, is_training=False):
+    def forward(self, words, chars, pos_seq, loc_seq, adv=None, is_training=False):
         src_word_embeds = self.word_embeddings(words)
         if adv is not None:
             batch_len = src_word_embeds.size()[0]
@@ -679,6 +761,9 @@ class Encoder(nn.Module):
         if use_pos_tags:
             src_pos_embeds = self.pos_embeddings(pos_seq)
             words_input = torch.cat((words_input, src_pos_embeds), -1)
+        if use_loc_embed:
+            src_loc_embeds = self.loc_embeddings(loc_seq)
+            words_input = torch.cat((words_input, src_loc_embeds), -1)
 
         # words_input = torch.cat((src_word_embeds, char_feature, src_pos_embeds), -1)
         outputs, hc = self.lstm(words_input)
@@ -697,7 +782,8 @@ class Decoder(nn.Module):
 
         if att_type == 0:
             self.attention = Attention(input_dim)
-            self.lstm = nn.LSTMCell(10 * self.input_dim, self.hidden_dim)
+            self.lstm = nn.LSTMCell(rel_embed_dim + 4 * pointer_net_hidden_size + enc_hidden_size,
+                                    self.hidden_dim)
         elif att_type == 1:
             self.w = nn.Linear(9 * self.input_dim, self.input_dim)
             self.attention = Attention(input_dim)
@@ -718,6 +804,7 @@ class Decoder(nn.Module):
         self.arg1e_lin = nn.Linear(pointer_net_hidden_size, 1)
         self.arg2s_lin = nn.Linear(pointer_net_hidden_size, 1)
         self.arg2e_lin = nn.Linear(pointer_net_hidden_size, 1)
+        # self.sent_cnn = cnn()
         if use_sentiment_attention:
             self.sent_att = Sentiment_Attention(enc_hidden_size, 2 * pointer_net_hidden_size)
             self.rel_lin = nn.Linear(dec_hidden_size + 4 * pointer_net_hidden_size + 2 * enc_hidden_size,
@@ -827,7 +914,7 @@ class Seq2SeqModel(nn.Module):
         self.relation_embeddings = nn.Embedding(len(relnameToIdx), rel_embed_dim)
         self.dropout = nn.Dropout(drop_rate)
 
-    def forward(self, src_words_seq, src_mask, src_char_seq, pos_seq, trg_words_seq, trg_seq_len,
+    def forward(self, src_words_seq, src_mask, src_char_seq, pos_seq, loc_seq, trg_words_seq, trg_seq_len,
                 arg1swts, arg1ewts, arg2swts, arg2ewts, adv=None, is_training=False):
         if is_training:
             trg_word_embeds = self.dropout(self.relation_embeddings(trg_words_seq))
@@ -835,7 +922,7 @@ class Seq2SeqModel(nn.Module):
         src_seq_len = src_words_seq.size()[1]
         # trg_seq_len = trg_rel_cnt
 
-        enc_hs = self.encoder(src_words_seq, src_char_seq, pos_seq, adv, is_training)
+        enc_hs = self.encoder(src_words_seq, src_char_seq, pos_seq, loc_seq, adv, is_training)
 
         h0 = autograd.Variable(torch.FloatTensor(torch.zeros(batch_len, dec_hidden_size))).cuda()
         c0 = autograd.Variable(torch.FloatTensor(torch.zeros(batch_len, dec_hidden_size))).cuda()
@@ -951,24 +1038,19 @@ def predict(samples, model, model_id):
         trg_words_seq = torch.from_numpy(cur_samples_input['decoder_input'].astype('long'))
         src_chars_seq = torch.from_numpy(cur_samples_input['src_chars'].astype('long'))
         src_pos_tags = torch.from_numpy(cur_samples_input['src_pos_tags'].astype('long'))
+        src_loc = torch.from_numpy(cur_samples_input['src_loc'].astype('long'))
 
-        if torch.cuda.is_available():
-            src_words_seq = src_words_seq.cuda()
-            src_words_mask = src_words_mask.cuda()
-            trg_words_seq = trg_words_seq.cuda()
-            src_chars_seq = src_chars_seq.cuda()
-            src_pos_tags = src_pos_tags.cuda()
-
-        src_words_seq = autograd.Variable(src_words_seq)
-        src_words_mask = autograd.Variable(src_words_mask)
-        trg_words_seq = autograd.Variable(trg_words_seq)
-        src_chars_seq = autograd.Variable(src_chars_seq)
-        src_pos_tags = autograd.Variable(src_pos_tags)
+        src_words_seq = autograd.Variable(src_words_seq.cuda())
+        src_words_mask = autograd.Variable(src_words_mask.cuda())
+        trg_words_seq = autograd.Variable(trg_words_seq.cuda())
+        src_chars_seq = autograd.Variable(src_chars_seq.cuda())
+        src_pos_tags = autograd.Variable(src_pos_tags.cuda())
+        src_loc = autograd.Variable(src_loc.cuda())
 
         with torch.no_grad():
             if model_id == 1:
-                outputs = model(src_words_seq, src_words_mask, src_chars_seq, src_pos_tags, trg_words_seq,
-                                max_trg_len, None, None, None, None, None, False)
+                outputs = model(src_words_seq, src_words_mask, src_chars_seq, src_pos_tags, src_loc,
+                                trg_words_seq, max_trg_len, None, None, None, None, None, False)
 
         rel += list(outputs[0].data.cpu().numpy())
         arg1s += list(outputs[1].data.cpu().numpy())
@@ -1013,6 +1095,7 @@ def train_model(model_id, train_samples, dev_samples, test_samples, best_model_f
     best_dev_acc = -1.0
     best_epoch_idx = -1
     best_epoch_seed = -1
+
     for epoch_idx in range(0, num_epoch):
         model.train()
         model.zero_grad()
@@ -1020,17 +1103,18 @@ def train_model(model_id, train_samples, dev_samples, test_samples, best_model_f
         cur_seed = random_seed + epoch_idx + 1
 
         set_random_seeds(cur_seed)
-        cur_shuffled_train_data = shuffle_data(train_samples)
+        # cur_shuffled_train_data = shuffle_data(train_samples)
+        random.shuffle(train_samples)
         start_time = datetime.datetime.now()
         train_loss_val = 0.0
 
         for batch_idx in tqdm(range(0, batch_count)):
             batch_start = batch_idx * batch_size
-            batch_end = min(len(cur_shuffled_train_data), batch_start + batch_size)
+            batch_end = min(len(train_samples), batch_start + batch_size)
             if batch_idx == batch_count - 1 and move_last_batch:
-                batch_end = len(cur_shuffled_train_data)
+                batch_end = len(train_samples)
 
-            cur_batch = cur_shuffled_train_data[batch_start:batch_end]
+            cur_batch = train_samples[batch_start:batch_end]
             cur_samples_input = get_batch_data(cur_batch, True)
 
             src_words_seq = torch.from_numpy(cur_samples_input['src_words'].astype('long'))
@@ -1038,6 +1122,7 @@ def train_model(model_id, train_samples, dev_samples, test_samples, best_model_f
             trg_words_seq = torch.from_numpy(cur_samples_input['decoder_input'].astype('long'))
             src_chars_seq = torch.from_numpy(cur_samples_input['src_chars'].astype('long'))
             src_pos_tags = torch.from_numpy(cur_samples_input['src_pos_tags'].astype('long'))
+            src_loc = torch.from_numpy(cur_samples_input['src_loc'].astype('long'))
 
             arg1sweights = torch.from_numpy(cur_samples_input['arg1sweights'].astype('float32'))
             arg1eweights = torch.from_numpy(cur_samples_input['arg1eweights'].astype('float32'))
@@ -1057,6 +1142,7 @@ def train_model(model_id, train_samples, dev_samples, test_samples, best_model_f
             trg_words_seq = autograd.Variable(trg_words_seq.cuda())
             src_chars_seq = autograd.Variable(src_chars_seq.cuda())
             src_pos_tags = autograd.Variable(src_pos_tags.cuda())
+            src_loc = autograd.Variable(src_loc.cuda())
 
             arg1sweights = autograd.Variable(arg1sweights.cuda())
             arg1eweights = autograd.Variable(arg1eweights.cuda())
@@ -1072,8 +1158,9 @@ def train_model(model_id, train_samples, dev_samples, test_samples, best_model_f
             trg_vec_mask = autograd.Variable(trg_vec_mask.cuda())
             trg_seq_len = rel.size()[1]
             if model_id == 1:
-                outputs = model(src_words_seq, src_words_mask, src_chars_seq, src_pos_tags, trg_words_seq,
-                                trg_seq_len, arg1sweights, arg1eweights, arg2sweights, arg2eweights, None, True)
+                outputs = model(src_words_seq, src_words_mask, src_chars_seq, src_pos_tags, src_loc,
+                                trg_words_seq, trg_seq_len, arg1sweights, arg1eweights, arg2sweights,
+                                arg2eweights, None, True)
 
             rel = rel.view(-1, 1).squeeze()
             arg1s = arg1s.view(-1, 1).squeeze()
@@ -1185,36 +1272,48 @@ if __name__ == "__main__":
 
     use_char_embed = True
     use_pos_tags = True
-    use_data_aug = True  # bool(int(sys.argv[6]))
-    use_sentiment_attention = True
+    use_loc_embed = False
+    use_nr_triplets = False
+    use_data_aug = False  # bool(int(sys.argv[6]))
+    use_sentiment_attention = False
 
     use_adv = False  # bool(int(sys.argv[8]))
     adv_eps = 0.01  # float(sys.argv[9])
+    rel_th = 0.5
+
+    batch_size = 16
+    num_epoch = 100
+    drop_rate = 0.5
+    early_stop_cnt = 100
+    # loss_eps = 0.01
 
     use_gold_location = False   # bool(int(sys.argv[7]))
     use_vec_loss = False
     # run = sys.argv[5]
-    batch_size = 16
-    num_epoch = 150
 
-    max_src_len = 100
-    max_trg_len = 10
+    max_src_len = 100  # 100
+    max_trg_len = 10  # 10
+    max_nr_cnt = 10
+    if use_nr_triplets:
+        max_trg_len += max_nr_cnt
     embedding_file = 'cased_glove300.txt'
     update_freq = 1
-    wf = 1.0
+    wf = 1
     att_type = 2
+    max_dist = 10
 
     use_hadamard = False  # bool(int(sys.argv[13]))
     enc_type = ['LSTM', 'GCN', 'LSTM-GCN'][0]
 
     word_embed_dim = 300
-    word_min_freq = 2
+    word_min_freq = 10
 
     char_embed_dim = 25
     pos_tag_dim = 25
+    loc_embed_dim = 25
     char_feature_size = 25
     conv_filter_size = 3
-    max_word_len = 10
+    max_word_len = 25
     rel_embed_dim = 25
 
     enc_inp_size = word_embed_dim
@@ -1222,13 +1321,13 @@ if __name__ == "__main__":
         enc_inp_size += char_feature_size
     if use_pos_tags:
         enc_inp_size += pos_tag_dim
+    if use_loc_embed:
+        enc_inp_size += loc_embed_dim
     enc_hidden_size = 300
     dec_inp_size = enc_hidden_size
     dec_hidden_size = dec_inp_size
     pointer_net_hidden_size = 2 * enc_hidden_size
 
-    drop_rate = 0.5
-    early_stop_cnt = 5
     Sample = recordclass("Sample", "Id SrcLen SrcWords TrgLen TrgRels TrgPointers")
     rel_file = os.path.join(src_data_folder, 'relations.txt')
     relnameToIdx, relIdxToName = get_relations(rel_file)
@@ -1244,21 +1343,30 @@ if __name__ == "__main__":
 
         src_train_file = os.path.join(src_data_folder, 'train.sent')
         trg_train_file = os.path.join(src_data_folder, 'train.pointer')
-        train_data = read_data(src_train_file, trg_train_file, 1)
+        trg_nr_train_file = os.path.join(src_data_folder, 'train.nrpointer')
+        train_data = read_data(src_train_file, trg_train_file, trg_nr_train_file, 1)
+
+        # train_data = train_data[:100]
 
         src_dev_file = os.path.join(src_data_folder, 'dev.sent')
         trg_dev_file = os.path.join(src_data_folder, 'dev.pointer')
-        dev_data = read_data(src_dev_file, trg_dev_file, 2)
+        dev_data = read_data(src_dev_file, trg_dev_file, '', 2)
+
+        # train_dev = old_train_data + old_dev_data
+        # random.shuffle(train_dev)
+        # cut_point = int(0.1 * len(train_dev))
+        # dev_data = train_dev[:cut_point]
+        # train_data = train_dev[cut_point:]
 
         src_test_file = os.path.join(src_data_folder, 'test.sent')
         trg_test_file = os.path.join(src_data_folder, 'test.pointer')
-        test_data = read_data(src_test_file, trg_test_file, 3)
+        test_data = read_data(src_test_file, trg_test_file, '', 3)
 
         custom_print('Training data size:', len(train_data))
         custom_print('Development data size:', len(dev_data))
         custom_print('Test data size:', len(test_data))
 
-        all_data = train_data + dev_data + test_data
+        # all_data = train_data + dev_data + test_data
 
         custom_print("preparing vocabulary......")
         save_vocab = os.path.join(trg_data_folder, 'vocab.pkl')
@@ -1266,7 +1374,8 @@ if __name__ == "__main__":
         custom_print("getting pos tags......")
         pos_vocab = build_tags(src_train_file, src_dev_file, src_test_file)
 
-        word_vocab, char_vocab, word_embed_matrix = build_vocab(all_data, save_vocab, embedding_file)
+        word_vocab, char_vocab, word_embed_matrix = build_vocab(train_data, dev_data, test_data,
+                                                                save_vocab, embedding_file)
 
         custom_print("Training started......")
         train_model(model_name, train_data, dev_data, test_data, model_file_name)
@@ -1296,14 +1405,15 @@ if __name__ == "__main__":
         src_test_file = os.path.join(src_data_folder, 'test.sent')
         trg_test_file = os.path.join(src_data_folder, 'test.pointer')
         # adj_test_file = os.path.join(src_data_folder, 'test.dep')
-        test_data = read_data(src_test_file, trg_test_file, 3)
+        test_data = read_data(src_test_file, trg_test_file, '', 3)
+        custom_print('Test data size:', len(test_data))
 
         reader = open(os.path.join(src_data_folder, 'test.tup'))
         test_gt_lines = reader.readlines()
         reader.close()
 
         print('Test size:', len(test_data))
-        set_random_seeds(random_seed)
+        # set_random_seeds(random_seed)
         test_preds = predict(test_data, best_model, model_name)
         pred_pos, gt_pos, correct_pos = get_F1(test_data, test_preds)
         custom_print(pred_pos, '\t', gt_pos, '\t', correct_pos)
@@ -1315,6 +1425,7 @@ if __name__ == "__main__":
         custom_print('F1:', round(test_acc, 3))
         # write_test_res(test_data, test_preds, os.path.join(trg_data_folder, 'test.out'))
 
-        write_test_res(src_test_file,test_gt_lines,test_data, test_preds, os.path.join(trg_data_folder, 'test.out'))
+        write_test_res(src_test_file, test_gt_lines, test_data, test_preds,
+                       os.path.join(trg_data_folder, 'test.out'))
 
         logger.close()
