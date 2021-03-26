@@ -75,6 +75,8 @@ def build_vocab(tr_data, dv_data, ts_data, save_vocab, embedding_file):
     char_idx = 2
     for d in tr_data:
         for word in d.SrcWords:
+            if lower_cased:
+                word = word.lower()
             if word not in vocab:
                 vocab[word] = 1
             else:
@@ -87,6 +89,9 @@ def build_vocab(tr_data, dv_data, ts_data, save_vocab, embedding_file):
 
     for d in dv_data + ts_data:
         for word in d.SrcWords:
+            if lower_cased:
+                word = word.lower()
+
             if word not in vocab:
                 vocab[word] = 0
 
@@ -146,6 +151,12 @@ def get_sample(uid, src_line, trg_line, nr_line, datatype):
     trg_rels = []
     trg_pointers = []
     parts = trg_line.split('|')
+    triples = []
+    for part in parts:
+        elements = part.strip().split(' ')
+        triples.append((int(elements[0]), int(elements[1]), int(elements[2]), int(elements[3]),
+                        relnameToIdx[elements[4]]))
+
     if datatype == 1 and use_nr_triplets:
         if len(nr_line) > 0:
             nr_parts = nr_line.split('|')
@@ -153,12 +164,13 @@ def get_sample(uid, src_line, trg_line, nr_line, datatype):
             nr_cnt = min(len(nr_parts), random.choice([num + 1 for num in range(max_nr_cnt)]))
             parts += nr_parts[:nr_cnt]
     if datatype == 1:
-        random.shuffle(parts)
+        # random.shuffle(parts)
+        triples = sorted(triples, key=lambda element: (element[0], element[2]))
         # print(parts)
-    for part in parts:
-        elements = part.strip().split(' ')
-        trg_rels.append(relnameToIdx[elements[4]])
-        trg_pointers.append((int(elements[0]), int(elements[1]), int(elements[2]), int(elements[3])))
+    for triple in triples:
+        # elements = part.strip().split(' ')
+        trg_rels.append(triple[4])
+        trg_pointers.append((triple[0], triple[1], triple[2], triple[3]))
 
     if datatype == 1 and (len(src_words) > max_src_len or len(trg_rels) > max_trg_len):
         return False, None
@@ -329,11 +341,11 @@ def get_pred_triples(rel, arg1s, arg1e, arg2s, arg2e, src_words):
             break
         if use_nr_triplets and pred_idx == relnameToIdx['NR']:
             continue
-        if job_mode == 'test' and pred_score < rel_th:
-            continue
+        # if job_mode == 'test' and pred_score < rel_th:
+        #     continue
         s1, e1, s2, e2 = get_answer_pointers(arg1s[i], arg1e[i], arg2s[i], arg2e[i], len(src_words))
-        if job_mode == 'test' and abs(s1 - s2) > max_dist:
-            continue
+        # if job_mode == 'test' and abs(s1 - s2) > max_dist:
+        #     continue
         arg1 = ' '.join(src_words[s1: e1 + 1])
         arg2 = ' '.join(src_words[s2: e2 + 1])
         arg1 = arg1.strip()
@@ -416,6 +428,8 @@ def get_max_len(sample_batch):
 def get_words_index_seq(words, max_len):
     seq = list()
     for word in words:
+        if lower_cased:
+            word = word.lower()
         if word in word_vocab:
             seq.append(word_vocab[word])
         else:
@@ -449,6 +463,8 @@ def get_char_seq(words, max_len):
     for i in range(0, conv_filter_size - 1):
         char_seq.append(char_vocab['<PAD>'])
     for word in words:
+        if lower_cased:
+            word = word.lower()
         for c in word[0:min(len(word), max_word_len)]:
             if c in char_vocab:
                 char_seq.append(char_vocab[c])
@@ -614,7 +630,13 @@ class CharEmbeddings(nn.Module):
     def __init__(self, vocab_size, embed_dim, drop_out_rate):
         super(CharEmbeddings, self).__init__()
         self.embeddings = nn.Embedding(vocab_size, embed_dim, padding_idx=0)
-        self.conv1d = nn.Conv1d(char_embed_dim, char_feature_size, conv_filter_size)
+        # self.conv_layers = nn.ModuleList()
+        # self.max_pool_layers = nn.ModuleList()
+        # for i in range(len(conv_filters)):
+        #     self.conv_layers.append(nn.Conv1d(char_embed_dim, int(char_feature_size / 3), conv_filters[i]))
+        #     self.max_pool_layers.append(nn.MaxPool1d(max_word_len + conv_filters[i] - 1,
+        #                                              max_word_len + conv_filters[i] - 1))
+        self.conv1d = nn.Conv1d(char_embed_dim, char_feature_size, 3)
         self.max_pool = nn.MaxPool1d(max_word_len + conv_filter_size - 1, max_word_len + conv_filter_size - 1)
         self.dropout = nn.Dropout(drop_out_rate)
 
@@ -624,6 +646,10 @@ class CharEmbeddings(nn.Module):
         char_embeds = char_embeds.permute(0, 2, 1)
         char_feature = torch.tanh(self.max_pool(self.conv1d(char_embeds)))
         char_feature = char_feature.permute(0, 2, 1)
+        # for i in range(1, len(conv_filters)):
+        #     cur_char_feature = torch.tanh(self.max_pool_layers[i](self.conv_layers[i](char_embeds)))
+        #     cur_char_feature = cur_char_feature.permute(0, 2, 1)
+        #     char_feature = torch.cat((char_feature, cur_char_feature), -1)
         return char_feature
 
 
@@ -789,31 +815,37 @@ class Decoder(nn.Module):
             self.attention = Attention(input_dim)
             self.lstm = nn.LSTMCell(10 * self.input_dim, self.hidden_dim)
         else:
-            self.w = nn.Linear(rel_embed_dim + 4 * pointer_net_hidden_size, self.input_dim)
+            self.w = nn.Linear(4 * pointer_net_hidden_size, self.input_dim)
             self.attention1 = Attention(input_dim)
             self.attention2 = Attention(input_dim)
-            self.lstm = nn.LSTMCell(rel_embed_dim + 4 * pointer_net_hidden_size + 2 * enc_hidden_size,
+            self.lstm = nn.LSTMCell(4 * pointer_net_hidden_size + 2 * enc_hidden_size,
                                     self.hidden_dim)
 
-        self.e1_pointer_lstm = nn.LSTM(enc_hidden_size + dec_hidden_size, int(pointer_net_hidden_size/2),
-                                       1, batch_first=True, bidirectional=True)
-        self.e2_pointer_lstm = nn.LSTM(enc_hidden_size + dec_hidden_size + pointer_net_hidden_size,
-                                       int(pointer_net_hidden_size/2), 1, batch_first=True, bidirectional=True)
+        if gen_direct == gen_directions[0] or gen_direct == gen_directions[2]:
+            self.ap_first_pointer_lstm = nn.LSTM(enc_hidden_size + dec_hidden_size, int(pointer_net_hidden_size / 2),
+                                           1, batch_first=True, bidirectional=True)
+            self.op_second_pointer_lstm = nn.LSTM(enc_hidden_size + dec_hidden_size + pointer_net_hidden_size,
+                                           int(pointer_net_hidden_size / 2), 1, batch_first=True, bidirectional=True)
+        if gen_direct == gen_directions[1] or gen_direct == gen_directions[2]:
+            self.op_first_pointer_lstm = nn.LSTM(enc_hidden_size + dec_hidden_size, int(pointer_net_hidden_size / 2),
+                                           1, batch_first=True, bidirectional=True)
+            self.ap_second_pointer_lstm = nn.LSTM(enc_hidden_size + dec_hidden_size + pointer_net_hidden_size,
+                                           int(pointer_net_hidden_size / 2), 1, batch_first=True, bidirectional=True)
 
-        self.arg1s_lin = nn.Linear(pointer_net_hidden_size, 1)
-        self.arg1e_lin = nn.Linear(pointer_net_hidden_size, 1)
-        self.arg2s_lin = nn.Linear(pointer_net_hidden_size, 1)
-        self.arg2e_lin = nn.Linear(pointer_net_hidden_size, 1)
+        self.ap_start_lin = nn.Linear(pointer_net_hidden_size, 1)
+        self.ap_end_lin = nn.Linear(pointer_net_hidden_size, 1)
+        self.op_start_lin = nn.Linear(pointer_net_hidden_size, 1)
+        self.op_end_lin = nn.Linear(pointer_net_hidden_size, 1)
         # self.sent_cnn = cnn()
         if use_sentiment_attention:
             self.sent_att = Sentiment_Attention(enc_hidden_size, 2 * pointer_net_hidden_size)
-            self.rel_lin = nn.Linear(dec_hidden_size + 4 * pointer_net_hidden_size + 2 * enc_hidden_size,
+            self.sent_lin = nn.Linear(dec_hidden_size + 4 * pointer_net_hidden_size + 2 * enc_hidden_size,
                                      len(relnameToIdx))
         else:
-            self.rel_lin = nn.Linear(dec_hidden_size + 4 * pointer_net_hidden_size, len(relnameToIdx))
+            self.sent_lin = nn.Linear(dec_hidden_size + 4 * pointer_net_hidden_size, len(relnameToIdx))
         self.dropout = nn.Dropout(self.drop_rate)
 
-    def forward(self, prev_tuples, h_prev, enc_hs, src_mask, arg1swts, arg1ewts, arg2swts, arg2ewts,
+    def forward(self, prev_tuples, h_prev, enc_hs, src_mask, ap_start_wts, ap_end_wts, op_start_wts, op_end_wts,
                 is_training=False):
         src_time_steps = enc_hs.size()[1]
 
@@ -840,70 +872,90 @@ class Decoder(nn.Module):
         if use_hadamard:
             enc_hs = enc_hs * attn_weights.unsqueeze(2)
 
-        e1_pointer_lstm_input = torch.cat((enc_hs, hidden.unsqueeze(1).repeat(1, src_time_steps, 1)), 2)
-        e1_pointer_lstm_out, phc = self.e1_pointer_lstm(e1_pointer_lstm_input)
-        e1_pointer_lstm_out = self.dropout(e1_pointer_lstm_out)
+        if gen_direct == gen_directions[0] or gen_direct == gen_directions[2]:
+            ap_first_pointer_lstm_input = torch.cat((enc_hs, hidden.unsqueeze(1).repeat(1, src_time_steps, 1)), 2)
+            ap_first_pointer_lstm_out, phc = self.ap_first_pointer_lstm(ap_first_pointer_lstm_input)
+            ap_first_pointer_lstm_out = self.dropout(ap_first_pointer_lstm_out)
 
-        arg1s = self.arg1s_lin(e1_pointer_lstm_out).squeeze()
-        arg1s.data.masked_fill_(src_mask.data, -float('inf'))
+            op_second_pointer_lstm_input = torch.cat((ap_first_pointer_lstm_input, ap_first_pointer_lstm_out), 2)
+            op_second_pointer_lstm_out, phc = self.op_second_pointer_lstm(op_second_pointer_lstm_input)
+            op_second_pointer_lstm_out = self.dropout(op_second_pointer_lstm_out)
 
-        arg1e = self.arg1e_lin(e1_pointer_lstm_out).squeeze()
-        arg1e.data.masked_fill_(src_mask.data, -float('inf'))
+        if gen_direct == gen_directions[1] or gen_direct == gen_directions[2]:
+            op_first_pointer_lstm_input = torch.cat((enc_hs, hidden.unsqueeze(1).repeat(1, src_time_steps, 1)), 2)
+            op_first_pointer_lstm_out, phc = self.op_first_pointer_lstm(op_first_pointer_lstm_input)
+            op_first_pointer_lstm_out = self.dropout(op_first_pointer_lstm_out)
 
-        arg1sweights = F.softmax(arg1s, dim=-1)
-        arg1eweights = F.softmax(arg1e, dim=-1)
+            ap_second_pointer_lstm_input = torch.cat((op_first_pointer_lstm_input, op_first_pointer_lstm_out), 2)
+            ap_second_pointer_lstm_out, phc = self.ap_second_pointer_lstm(ap_second_pointer_lstm_input)
+            ap_second_pointer_lstm_out = self.dropout(ap_second_pointer_lstm_out)
 
-        arg1sv = torch.bmm(arg1sweights.unsqueeze(1), e1_pointer_lstm_out).squeeze()
-        arg1ev = torch.bmm(arg1eweights.unsqueeze(1), e1_pointer_lstm_out).squeeze()
-        arg1 = torch.cat((arg1sv, arg1ev), -1)
+        if gen_direct == gen_directions[0]:
+            ap_pointer_lstm_out = ap_first_pointer_lstm_out
+            op_pointer_lstm_out = op_second_pointer_lstm_out
+        elif gen_direct == gen_directions[1]:
+            ap_pointer_lstm_out = ap_second_pointer_lstm_out
+            op_pointer_lstm_out = op_first_pointer_lstm_out
+        else:
+            ap_pointer_lstm_out = (ap_first_pointer_lstm_out + ap_second_pointer_lstm_out)/2
+            op_pointer_lstm_out = (op_first_pointer_lstm_out + op_second_pointer_lstm_out)/2
 
-        e2_pointer_lstm_input = torch.cat((e1_pointer_lstm_input, e1_pointer_lstm_out), 2)
-        e2_pointer_lstm_out, phc = self.e2_pointer_lstm(e2_pointer_lstm_input)
-        e2_pointer_lstm_out = self.dropout(e2_pointer_lstm_out)
+        ap_start = self.ap_start_lin(ap_pointer_lstm_out).squeeze()
+        ap_start.data.masked_fill_(src_mask.data, -float('inf'))
 
-        arg2s = self.arg2s_lin(e2_pointer_lstm_out).squeeze()
-        arg2s.data.masked_fill_(src_mask.data, -float('inf'))
+        ap_end = self.ap_end_lin(ap_pointer_lstm_out).squeeze()
+        ap_end.data.masked_fill_(src_mask.data, -float('inf'))
 
-        arg2e = self.arg2e_lin(e2_pointer_lstm_out).squeeze()
-        arg2e.data.masked_fill_(src_mask.data, -float('inf'))
+        ap_start_weights = F.softmax(ap_start, dim=-1)
+        ap_end_weights = F.softmax(ap_end, dim=-1)
 
-        arg2sweights = F.softmax(arg2s, dim=-1)
-        arg2eweights = F.softmax(arg2e, dim=-1)
+        ap_sv = torch.bmm(ap_start_weights.unsqueeze(1), ap_pointer_lstm_out).squeeze()
+        ap_ev = torch.bmm(ap_end_weights.unsqueeze(1), ap_pointer_lstm_out).squeeze()
+        ap = torch.cat((ap_sv, ap_ev), -1)
 
-        arg2sv = torch.bmm(arg2sweights.unsqueeze(1), e2_pointer_lstm_out).squeeze()
-        arg2ev = torch.bmm(arg2eweights.unsqueeze(1), e2_pointer_lstm_out).squeeze()
-        arg2 = torch.cat((arg2sv, arg2ev), -1)
+        op_start = self.op_start_lin(op_pointer_lstm_out).squeeze()
+        op_start.data.masked_fill_(src_mask.data, -float('inf'))
+
+        op_end = self.op_end_lin(op_pointer_lstm_out).squeeze()
+        op_end.data.masked_fill_(src_mask.data, -float('inf'))
+
+        op_start_weights = F.softmax(op_start, dim=-1)
+        op_end_weights = F.softmax(op_end, dim=-1)
+
+        op_sv = torch.bmm(op_start_weights.unsqueeze(1), op_pointer_lstm_out).squeeze()
+        op_ev = torch.bmm(op_end_weights.unsqueeze(1), op_pointer_lstm_out).squeeze()
+        op = torch.cat((op_sv, op_ev), -1)
         if use_sentiment_attention:
-            sent_ctx = self.sent_att(arg1, arg2, enc_hs, src_mask)
-            rel = self.rel_lin(self.dropout(torch.cat((hidden, arg1, arg2, sent_ctx), -1)))
+            sent_ctx = self.sent_att(ap, op, enc_hs, src_mask)
+            sentiment = self.sent_lin(self.dropout(torch.cat((hidden, ap, op, sent_ctx), -1)))
         else:
-            rel = self.rel_lin(self.dropout(torch.cat((hidden, arg1, arg2), -1)))
+            sentiment = self.sent_lin(self.dropout(torch.cat((hidden, ap, op), -1)))
         if is_training:
-            pred_vec = get_vec(arg1s, arg1e, arg2s, arg2e, rel)
-            arg1s = F.log_softmax(arg1s, dim=-1)
-            arg1e = F.log_softmax(arg1e, dim=-1)
-            arg2s = F.log_softmax(arg2s, dim=-1)
-            arg2e = F.log_softmax(arg2e, dim=-1)
-            rel = F.log_softmax(rel, dim=-1)
+            pred_vec = get_vec(ap_start, ap_end, op_start, op_end, sentiment)
+            ap_start = F.log_softmax(ap_start, dim=-1)
+            ap_end = F.log_softmax(ap_end, dim=-1)
+            op_start = F.log_softmax(op_start, dim=-1)
+            op_end = F.log_softmax(op_end, dim=-1)
+            sentiment = F.log_softmax(sentiment, dim=-1)
             if use_gold_location:
-                arg1sv = torch.bmm(arg1swts.unsqueeze(1), e1_pointer_lstm_out).squeeze()
-                arg1ev = torch.bmm(arg1ewts.unsqueeze(1), e1_pointer_lstm_out).squeeze()
-                arg1 = torch.cat((arg1sv, arg1ev), -1)
+                ap_sv = torch.bmm(ap_start_wts.unsqueeze(1), ap_pointer_lstm_out).squeeze()
+                ap_ev = torch.bmm(ap_end_wts.unsqueeze(1), ap_pointer_lstm_out).squeeze()
+                ap = torch.cat((ap_sv, ap_ev), -1)
 
-                arg2sv = torch.bmm(arg2swts.unsqueeze(1), e2_pointer_lstm_out).squeeze()
-                arg2ev = torch.bmm(arg2ewts.unsqueeze(1), e2_pointer_lstm_out).squeeze()
-                arg2 = torch.cat((arg2sv, arg2ev), -1)
+                op_sv = torch.bmm(op_start_wts.unsqueeze(1), op_pointer_lstm_out).squeeze()
+                op_ev = torch.bmm(op_end_wts.unsqueeze(1), op_pointer_lstm_out).squeeze()
+                op = torch.cat((op_sv, op_ev), -1)
 
-            return rel.unsqueeze(1), arg1s.unsqueeze(1), arg1e.unsqueeze(1), arg2s.unsqueeze(1), \
-                arg2e.unsqueeze(1), (hidden, cell_state), arg1, arg2, pred_vec
+            return sentiment.unsqueeze(1), ap_start.unsqueeze(1), ap_end.unsqueeze(1), op_start.unsqueeze(1), \
+                op_end.unsqueeze(1), (hidden, cell_state), ap, op, pred_vec
         else:
-            arg1s = F.softmax(arg1s, dim=-1)
-            arg1e = F.softmax(arg1e, dim=-1)
-            arg2s = F.softmax(arg2s, dim=-1)
-            arg2e = F.softmax(arg2e, dim=-1)
-            rel = F.softmax(rel, dim=-1)
-            return rel.unsqueeze(1), arg1s.unsqueeze(1), arg1e.unsqueeze(1), arg2s.unsqueeze(1), arg2e.unsqueeze(1), \
-                   (hidden, cell_state), arg1, arg2
+            ap_start = F.softmax(ap_start, dim=-1)
+            ap_end = F.softmax(ap_end, dim=-1)
+            op_start = F.softmax(op_start, dim=-1)
+            op_end = F.softmax(op_end, dim=-1)
+            sentiment = F.softmax(sentiment, dim=-1)
+            return sentiment.unsqueeze(1), ap_start.unsqueeze(1), ap_end.unsqueeze(1), op_start.unsqueeze(1), \
+                   op_end.unsqueeze(1), (hidden, cell_state), ap, op
 
 
 class Seq2SeqModel(nn.Module):
@@ -911,13 +963,13 @@ class Seq2SeqModel(nn.Module):
         super(Seq2SeqModel, self).__init__()
         self.encoder = Encoder(enc_inp_size, int(enc_hidden_size/2), 1, True, drop_rate)
         self.decoder = Decoder(dec_inp_size, dec_hidden_size, 1, drop_rate, max_trg_len)
-        self.relation_embeddings = nn.Embedding(len(relnameToIdx), rel_embed_dim)
+        # self.relation_embeddings = nn.Embedding(len(relnameToIdx), rel_embed_dim)
         self.dropout = nn.Dropout(drop_rate)
 
     def forward(self, src_words_seq, src_mask, src_char_seq, pos_seq, loc_seq, trg_words_seq, trg_seq_len,
                 arg1swts, arg1ewts, arg2swts, arg2ewts, adv=None, is_training=False):
-        if is_training:
-            trg_word_embeds = self.dropout(self.relation_embeddings(trg_words_seq))
+        # if is_training:
+        #     trg_word_embeds = self.dropout(self.relation_embeddings(trg_words_seq))
         batch_len = src_words_seq.size()[0]
         src_seq_len = src_words_seq.size()[1]
         # trg_seq_len = trg_rel_cnt
@@ -928,11 +980,11 @@ class Seq2SeqModel(nn.Module):
         c0 = autograd.Variable(torch.FloatTensor(torch.zeros(batch_len, dec_hidden_size))).cuda()
         dec_hid = (h0, c0)
 
-        rel_embed = autograd.Variable(torch.FloatTensor(torch.zeros(batch_len, rel_embed_dim))).cuda()
+        # rel_embed = autograd.Variable(torch.FloatTensor(torch.zeros(batch_len, rel_embed_dim))).cuda()
         arg1 = autograd.Variable(torch.FloatTensor(torch.zeros(batch_len, 2 * pointer_net_hidden_size))).cuda()
         arg2 = autograd.Variable(torch.FloatTensor(torch.zeros(batch_len, 2 * pointer_net_hidden_size))).cuda()
 
-        prev_tuples = torch.cat((arg1, arg2, rel_embed), -1)
+        prev_tuples = torch.cat((arg1, arg2), -1)
 
         if is_training:
             dec_outs = self.decoder(prev_tuples, dec_hid, enc_hs, src_mask,
@@ -955,15 +1007,15 @@ class Seq2SeqModel(nn.Module):
 
         for t in range(1, trg_seq_len):
             if is_training:
-                rel_embed = trg_word_embeds[:, t - 1, :].squeeze()
-                prev_tuples = torch.cat((arg1, arg2, rel_embed), -1) + prev_tuples
+                # rel_embed = trg_word_embeds[:, t - 1, :].squeeze()
+                prev_tuples = torch.cat((arg1, arg2), -1) + prev_tuples
                 dec_outs = self.decoder(prev_tuples / (t+1), dec_hid, enc_hs, src_mask,
                                         arg1swts[:, t, :].squeeze(), arg1ewts[:, t, :].squeeze(),
                                         arg2swts[:, t, :].squeeze(), arg2ewts[:, t, :].squeeze(), is_training)
                 pred_vec = torch.cat((pred_vec, dec_outs[8].unsqueeze(1)), 1)
             else:
-                rel_embed = self.relation_embeddings(topi.squeeze().detach()).squeeze()
-                prev_tuples = torch.cat((arg1, arg2, rel_embed), -1) + prev_tuples
+                # rel_embed = self.relation_embeddings(topi.squeeze().detach()).squeeze()
+                prev_tuples = torch.cat((arg1, arg2), -1) + prev_tuples
                 dec_outs = self.decoder(prev_tuples / (t+1), dec_hid, enc_hs, src_mask,
                                         None, None, None, None, is_training)
 
@@ -1089,7 +1141,7 @@ def train_model(model_id, train_samples, dev_samples, test_samples, best_model_f
     vec_criterion = nn.MSELoss()
 
     custom_print('weight factor:', wf)
-    optimizer = optim.Adam(model.parameters(), weight_decay=0.00001)
+    optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=0.00001)
     custom_print(optimizer)
 
     best_dev_acc = -1.0
@@ -1272,19 +1324,24 @@ if __name__ == "__main__":
 
     use_char_embed = True
     use_pos_tags = True
+
     use_loc_embed = False
+    use_sentiment_attention = False
+
     use_nr_triplets = False
     use_data_aug = False  # bool(int(sys.argv[6]))
-    use_sentiment_attention = False
+    lower_cased = False
+    gen_directions = ['AspectFirst', 'OpinionFirst', 'BothWays']
+    gen_direct = gen_directions[0]
 
     use_adv = False  # bool(int(sys.argv[8]))
     adv_eps = 0.01  # float(sys.argv[9])
     rel_th = 0.5
 
-    batch_size = 16
-    num_epoch = 100
+    batch_size = int(sys.argv[6])     # 10
+    num_epoch = int(sys.argv[7])     # 30 for each dataset separately and 100 for res_all
     drop_rate = 0.5
-    early_stop_cnt = 100
+    early_stop_cnt = num_epoch
     # loss_eps = 0.01
 
     use_gold_location = False   # bool(int(sys.argv[7]))
@@ -1310,10 +1367,11 @@ if __name__ == "__main__":
 
     char_embed_dim = 25
     pos_tag_dim = 25
-    loc_embed_dim = 25
     char_feature_size = 25
     conv_filter_size = 3
     max_word_len = 25
+
+    loc_embed_dim = 25
     rel_embed_dim = 25
 
     enc_inp_size = word_embed_dim
@@ -1326,7 +1384,7 @@ if __name__ == "__main__":
     enc_hidden_size = 300
     dec_inp_size = enc_hidden_size
     dec_hidden_size = dec_inp_size
-    pointer_net_hidden_size = 2 * enc_hidden_size
+    pointer_net_hidden_size = enc_hidden_size
 
     Sample = recordclass("Sample", "Id SrcLen SrcWords TrgLen TrgRels TrgPointers")
     rel_file = os.path.join(src_data_folder, 'relations.txt')
