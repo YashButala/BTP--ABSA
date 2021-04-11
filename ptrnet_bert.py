@@ -1201,7 +1201,7 @@ def train_model(model_id, train_samples, dev_samples, test_samples, best_model_f
 	vec_criterion = nn.MSELoss()
 
 	custom_print('weight factor:', wf)
-	optimizer = optim.Adam(model.parameters(), lr=0.0001, weight_decay=0.00001)
+	optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=0.00001)
 	custom_print(optimizer)
 
 	best_dev_acc = -1.0
