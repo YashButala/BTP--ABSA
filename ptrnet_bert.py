@@ -1112,8 +1112,8 @@ def set_random_seeds(seed):
 	random.seed(seed)
 	np.random.seed(seed)
 	torch.manual_seed(seed)
-	if n_gpu > 1:
-		torch.cuda.manual_seed_all(seed)
+	# if n_gpu > 1:
+	# 	torch.cuda.manual_seed_all(seed)
 
 
 def predict(samples, model, model_id):
@@ -1193,8 +1193,8 @@ def train_model(model_id, train_samples, dev_samples, test_samples, best_model_f
 	custom_print(model)
 	if torch.cuda.is_available():
 		model.cuda()
-	if n_gpu > 1:
-		model = torch.nn.DataParallel(model)
+	# if n_gpu > 1:
+	# 	model = torch.nn.DataParallel(model)
 
 	rel_criterion = nn.NLLLoss(ignore_index=0)
 	pointer_criterion = nn.NLLLoss(ignore_index=-1)
@@ -1521,8 +1521,8 @@ if __name__ == "__main__":
 		custom_print(best_model)
 		if torch.cuda.is_available():
 			best_model.cuda()
-		if n_gpu > 1:
-			best_model = torch.nn.DataParallel(best_model)
+		# if n_gpu > 1:
+		# 	best_model = torch.nn.DataParallel(best_model)
 		best_model.load_state_dict(torch.load(model_file))
 
 		custom_print('\nTest Results\n')
