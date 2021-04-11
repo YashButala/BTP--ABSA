@@ -20,132 +20,135 @@ import nltk
 nltk.download('averaged_perceptron_tagger')
 from nltk.tokenize import SpaceTokenizer
 
+from transformers import *
+tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
+
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 torch.autograd.set_detect_anomaly(True)
 
 def custom_print(*msg):
-    for i in range(0, len(msg)):
-        if i == len(msg) - 1:
-            print(msg[i])
-            logger.write(str(msg[i]) + '\n')
-        else:
-            print(msg[i], ' ', end='')
-            logger.write(str(msg[i]))
+	for i in range(0, len(msg)):
+		if i == len(msg) - 1:
+			print(msg[i])
+			logger.write(str(msg[i]) + '\n')
+		else:
+			print(msg[i], ' ', end='')
+			logger.write(str(msg[i]))
 
 
-def load_word_embedding(embed_file, vocab):
-	custom_print('vocab length:', len(vocab))
-	custom_print(embed_file)
-	embed_vocab = OrderedDict()
-	embed_matrix = list()
+# def load_word_embedding(embed_file, vocab):
+# 	custom_print('vocab length:', len(vocab))
+# 	custom_print(embed_file)
+# 	embed_vocab = OrderedDict()
+# 	embed_matrix = list()
 
-	embed_vocab['<PAD>'] = 0
-	embed_matrix.append(np.zeros(word_embed_dim, dtype=np.float32))
+# 	embed_vocab['<PAD>'] = 0
+# 	embed_matrix.append(np.zeros(word_embed_dim, dtype=np.float32))
 
-	embed_vocab['<UNK>'] = 1
-	embed_matrix.append(np.random.uniform(-0.25, 0.25, word_embed_dim))
+# 	embed_vocab['<UNK>'] = 1
+# 	embed_matrix.append(np.random.uniform(-0.25, 0.25, word_embed_dim))
 
-	word_idx = 2
-	with open(embed_file, "r") as f:
-		for line in f:
-			parts = line.split()
-			if len(parts) < word_embed_dim + 1:
-				continue
-			word = parts[0]
-			if word in vocab:
-				vec = [np.float32(val) for val in parts[1:]]
-				embed_matrix.append(vec)
-				embed_vocab[word] = word_idx
-				word_idx += 1
+# 	word_idx = 2
+# 	with open(embed_file, "r") as f:
+# 		for line in f:
+# 			parts = line.split()
+# 			if len(parts) < word_embed_dim + 1:
+# 				continue
+# 			word = parts[0]
+# 			if word in vocab:
+# 				vec = [np.float32(val) for val in parts[1:]]
+# 				embed_matrix.append(vec)
+# 				embed_vocab[word] = word_idx
+# 				word_idx += 1
 
-	for word in vocab:
-		if word not in embed_vocab and vocab[word] >= word_min_freq:
-			embed_matrix.append(np.random.uniform(-0.25, 0.25, word_embed_dim))
-			embed_vocab[word] = word_idx
-			word_idx += 1
+# 	for word in vocab:
+# 		if word not in embed_vocab and vocab[word] >= word_min_freq:
+# 			embed_matrix.append(np.random.uniform(-0.25, 0.25, word_embed_dim))
+# 			embed_vocab[word] = word_idx
+# 			word_idx += 1
 
-	custom_print('embed dictionary length:', len(embed_vocab))
-	return embed_vocab, np.array(embed_matrix, dtype=np.float32)
+# 	custom_print('embed dictionary length:', len(embed_vocab))
+# 	return embed_vocab, np.array(embed_matrix, dtype=np.float32)
  
 
-def build_vocab(tr_data, dv_data, ts_data, save_vocab, embedding_file):
-	vocab = OrderedDict()
-	char_v = OrderedDict()
-	char_v['<PAD>'] = 0
-	char_v['<UNK>'] = 1
-	char_idx = 2
-	for d in tr_data:
-		for word in d.SrcWords:
-			if lower_cased:
-				word = word.lower()
-			if word not in vocab:
-				vocab[word] = 1
-			else:
-				vocab[word] += 1
+# def build_vocab(tr_data, dv_data, ts_data, save_vocab, embedding_file):
+# 	vocab = OrderedDict()
+# 	char_v = OrderedDict()
+# 	char_v['<PAD>'] = 0
+# 	char_v['<UNK>'] = 1
+# 	char_idx = 2
+# 	for d in tr_data:
+# 		for word in d.SrcWords:
+# 			if lower_cased:
+# 				word = word.lower()
+# 			if word not in vocab:
+# 				vocab[word] = 1
+# 			else:
+# 				vocab[word] += 1
 
-			for c in word:
-				if c not in char_v:
-					char_v[c] = char_idx
-					char_idx += 1
+# 			for c in word:
+# 				if c not in char_v:
+# 					char_v[c] = char_idx
+# 					char_idx += 1
 
-	for d in dv_data + ts_data:
-		for word in d.SrcWords:
-			if lower_cased:
-				word = word.lower()
+# 	for d in dv_data + ts_data:
+# 		for word in d.SrcWords:
+# 			if lower_cased:
+# 				word = word.lower()
 
-			if word not in vocab:
-				vocab[word] = 0
+# 			if word not in vocab:
+# 				vocab[word] = 0
 
-			for c in word:
-				if c not in char_v:
-					char_v[c] = char_idx
-					char_idx += 1
+# 			for c in word:
+# 				if c not in char_v:
+# 					char_v[c] = char_idx
+# 					char_idx += 1
 
-	word_v, embed_matrix = load_word_embedding(embedding_file, vocab)
-	output = open(save_vocab, 'wb')
-	pickle.dump([word_v, char_v, pos_vocab], output)
-	output.close()
-	return word_v, char_v, embed_matrix
-
-
-def build_tags(file1, file2, file3):
-	tk = SpaceTokenizer()
-	f1 = open(file1, "r")
-	f2 = open(file2, "r")
-	f3 = open(file3, "r")
-	pos_vocab = OrderedDict()
-	pos_vocab['<PAD>'] = 0
-	pos_vocab['<UNK>'] = 1
-	k = 2
-	for line in f1:
-		text = tk.tokenize(line)
-		tags = nltk.pos_tag(text)
-		for t in tags:
-			if t[1] not in pos_vocab:
-				pos_vocab[t[1]] = k
-				k += 1
-	for line in f2:
-		text = tk.tokenize(line)
-		tags = nltk.pos_tag(text)
-		for t in tags:
-			if t[1] not in pos_vocab:
-				pos_vocab[t[1]] = k
-				k += 1
-	for line in f3:
-		text = tk.tokenize(line)
-		tags = nltk.pos_tag(text)
-		for t in tags:
-			if t[1] not in pos_vocab:
-				pos_vocab[t[1]] = k
-				k += 1
-	return pos_vocab
+# 	word_v, embed_matrix = load_word_embedding(embedding_file, vocab)
+# 	output = open(save_vocab, 'wb')
+# 	pickle.dump([word_v, char_v, pos_vocab], output)
+# 	output.close()
+# 	return word_v, char_v, embed_matrix
 
 
-def load_vocab(vocab_file):
-	with open(vocab_file, 'rb') as f:
-		embed_vocab, char_vocab, pos_vocab = pickle.load(f)
-	return embed_vocab, char_vocab, pos_vocab
+# def build_tags(file1, file2, file3):
+# 	tk = SpaceTokenizer()
+# 	f1 = open(file1, "r")
+# 	f2 = open(file2, "r")
+# 	f3 = open(file3, "r")
+# 	pos_vocab = OrderedDict()
+# 	pos_vocab['<PAD>'] = 0
+# 	pos_vocab['<UNK>'] = 1
+# 	k = 2
+# 	for line in f1:
+# 		text = tk.tokenize(line)
+# 		tags = nltk.pos_tag(text)
+# 		for t in tags:
+# 			if t[1] not in pos_vocab:
+# 				pos_vocab[t[1]] = k
+# 				k += 1
+# 	for line in f2:
+# 		text = tk.tokenize(line)
+# 		tags = nltk.pos_tag(text)
+# 		for t in tags:
+# 			if t[1] not in pos_vocab:
+# 				pos_vocab[t[1]] = k
+# 				k += 1
+# 	for line in f3:
+# 		text = tk.tokenize(line)
+# 		tags = nltk.pos_tag(text)
+# 		for t in tags:
+# 			if t[1] not in pos_vocab:
+# 				pos_vocab[t[1]] = k
+# 				k += 1
+# 	return pos_vocab
+
+
+# def load_vocab(vocab_file):
+# 	with open(vocab_file, 'rb') as f:
+# 		embed_vocab, char_vocab, pos_vocab = pickle.load(f)
+# 	return embed_vocab, char_vocab, pos_vocab
 
 
 def get_relations(file_name):
@@ -191,12 +194,9 @@ def get_sample(uid, src_line, trg_line, nr_line, datatype):
 			parts += nr_parts[:nr_cnt]
 	
 	if datatype == 1:
-		# random.shuffle(parts)
-		triples = sorted(triples, key=lambda element: (element[0], element[2]))
-		# print(parts)
+		triples = sorted(triples, key=lambda element: (element[0], element[2]))		
 
 	for triple in triples:
-		# elements = part.strip().split(' ')
 		trg_rels.append(triple[4])
 		trg_pointers.append((triple[0], triple[1], triple[2], triple[3]))
 
@@ -245,7 +245,7 @@ def read_data(src_file, trg_file, nr_file, datatype):
 	reader.close()
 
 	nr_lines = []
-	if datatype == 1:
+	if datatype == 1 and use_nr_triplets:
 		reader = open(nr_file)
 		nr_lines = reader.readlines()
 		reader.close()
@@ -412,17 +412,17 @@ def write_test_res(src, trg, data, preds, outfile):
 	reader.close()
 
 
-def shuffle_data(data):
-	custom_print(len(data))
-	# data.sort(key=lambda x: x.SrcLen)
-	num_batch = int(len(data) / batch_size)
-	rand_idx = random.sample(range(num_batch), num_batch)
-	new_data = []
-	for idx in rand_idx:
-		new_data += data[batch_size * idx: batch_size * (idx + 1)]
-	if len(new_data) < len(data):
-		new_data += data[num_batch * batch_size:]
-	return new_data
+# def shuffle_data(data):
+# 	custom_print(len(data))
+# 	# data.sort(key=lambda x: x.SrcLen)
+# 	num_batch = int(len(data) / batch_size)
+# 	rand_idx = random.sample(range(num_batch), num_batch)
+# 	new_data = []
+# 	for idx in rand_idx:
+# 		new_data += data[batch_size * idx: batch_size * (idx + 1)]
+# 	if len(new_data) < len(data):
+# 		new_data += data[num_batch * batch_size:]
+# 	return new_data
 
 
 def get_max_len(sample_batch):
@@ -439,62 +439,63 @@ def get_max_len(sample_batch):
 	return src_max_len, trg_max_len
 
 
-def get_words_index_seq(words, max_len):
-	seq = list()
-	for word in words:
-		if lower_cased:
-			word = word.lower()
-		if word in word_vocab:
-			seq.append(word_vocab[word])
-		else:
-			seq.append(word_vocab['<UNK>'])
-	pad_len = max_len - len(words)
-	for i in range(0, pad_len):
-		seq.append(word_vocab['<PAD>'])
-	return seq
+# def get_words_index_seq(words, max_len):
+# 	seq = list()
+# 	for word in words:
+# 			if lower_cased:
+# 				word = word.lower()
+# 			if word in word_vocab:
+# 				seq.append(word_vocab[word])
+# 			else:
+# 				seq.append(word_vocab['<UNK>'])
+# 	pad_len = max_len - len(words)
+# 	for i in range(0, pad_len):
+# 		seq.append(word_vocab['<PAD>'])
+	
+# 	return seq
 
 
-def get_pos_index_seq(words, max_len):
-	seq = list()
-	tk = SpaceTokenizer()
-	sent = " ".join(words)
-	text = tk.tokenize(sent)
-	tags = nltk.pos_tag(text)
-	for t in tags:
-		t1 = t[1]
-		if t1 in pos_vocab:
-			seq.append(pos_vocab[t1])
-		else:
-			seq.append(pos_vocab['<UNK>'])
-	pad_len = max_len - len(seq)
-	for i in range(0, pad_len):
-		seq.append(pos_vocab['<PAD>'])
-	return seq
+# def get_pos_index_seq(words, max_len):
+# 	seq = list()
+# 	tk = SpaceTokenizer()
+# 	sent = " ".join(words)
+# 	text = tk.tokenize(sent)
+# 	tags = nltk.pos_tag(text)
+# 	for t in tags:
+# 		t1 = t[1]
+# 		if t1 in pos_vocab:
+# 			seq.append(pos_vocab[t1])
+# 		else:
+# 			seq.append(pos_vocab['<UNK>'])
+# 	pad_len = max_len - len(seq)
+# 	for i in range(0, pad_len):
+# 		seq.append(pos_vocab['<PAD>'])
+# 	return seq
 
 
-def get_char_seq(words, max_len):
-	char_seq = list()
-	for i in range(0, conv_filter_size - 1):
-		char_seq.append(char_vocab['<PAD>'])
-	for word in words:
-		if lower_cased:
-			word = word.lower()
-		for c in word[0:min(len(word), max_word_len)]:
-			if c in char_vocab:
-				char_seq.append(char_vocab[c])
-			else:
-				char_seq.append(char_vocab['<UNK>'])
-		pad_len = max_word_len - len(word)
-		for i in range(0, pad_len):
-			char_seq.append(char_vocab['<PAD>'])
-		for i in range(0, conv_filter_size - 1):
-			char_seq.append(char_vocab['<PAD>'])
+# def get_char_seq(words, max_len):
+# 	char_seq = list()
+# 	for i in range(0, conv_filter_size - 1):
+# 		char_seq.append(char_vocab['<PAD>'])
+# 	for word in words:
+# 		if lower_cased:
+# 			word = word.lower()
+# 		for c in word[0:min(len(word), max_word_len)]:
+# 			if c in char_vocab:
+# 				char_seq.append(char_vocab[c])
+# 			else:
+# 				char_seq.append(char_vocab['<UNK>'])
+# 		pad_len = max_word_len - len(word)
+# 		for i in range(0, pad_len):
+# 			char_seq.append(char_vocab['<PAD>'])
+# 		for i in range(0, conv_filter_size - 1):
+# 			char_seq.append(char_vocab['<PAD>'])
 
-	pad_len = max_len - len(words)
-	for i in range(0, pad_len):
-		for i in range(0, max_word_len + conv_filter_size - 1):
-			char_seq.append(char_vocab['<PAD>'])
-	return char_seq
+# 	pad_len = max_len - len(words)
+# 	for i in range(0, pad_len):
+# 		for i in range(0, max_word_len + conv_filter_size - 1):
+# 			char_seq.append(char_vocab['<PAD>'])
+# 	return char_seq
 
 
 def get_relation_index_seq(rel_ids, max_len):
@@ -531,14 +532,14 @@ def get_pointer_location(pointers, pidx, src_max_len, trg_max_len):
 	return loc_seq
 
 
-def get_padded_mask(cur_len, max_len):
-	mask_seq = list()
-	for i in range(0, cur_len):
-		mask_seq.append(0)
-	pad_len = max_len - cur_len
-	for i in range(0, pad_len):
-		mask_seq.append(1)
-	return mask_seq
+# def get_padded_mask(cur_len, max_len):
+# 	mask_seq = list()
+# 	for i in range(0, cur_len):
+# 		mask_seq.append(0)
+# 	pad_len = max_len - cur_len
+# 	for i in range(0, pad_len):
+# 		mask_seq.append(1)
+# 	return mask_seq
 
 
 def get_target_vec(pointers, rels, src_max_len):
@@ -561,10 +562,12 @@ def get_batch_data(cur_samples, is_training=False):
 	batch_trg_max_len += 1
 	src_words_list = list()
 	src_words_mask_list = list()
-	src_char_seq = list()
+	
+	# src_char_seq = list()	
+	# src_pos_seq = list()
+	# src_loc_seq = list()
+
 	decoder_input_list = list()
-	src_pos_seq = list()
-	src_loc_seq = list()
 	arg1sweights = []
 	arg1eweights = []
 	arg2sweights = []
@@ -579,12 +582,24 @@ def get_batch_data(cur_samples, is_training=False):
 	target_vec_mask_seq = []
 
 	for sample in cur_samples:
-		src_words_list.append(get_words_index_seq(sample.SrcWords, batch_src_max_len))
-		src_words_mask_list.append(get_padded_mask(sample.SrcLen, batch_src_max_len))
-		src_char_seq.append(get_char_seq(sample.SrcWords, batch_src_max_len))
-		src_pos_seq.append(get_pos_index_seq(sample.SrcWords, batch_src_max_len))
-		src_loc_seq.append([i+1 for i in range(len(sample.SrcWords))] +
-						   [0 for i in range(batch_src_max_len - len(sample.SrcWords))])
+		# src_words_list.append(get_words_index_seq(sample.SrcWords, batch_src_max_len))
+		# src_words_mask_list.append(get_padded_mask(sample.SrcLen, batch_src_max_len))
+		# src_char_seq.append(get_char_seq(sample.SrcWords, batch_src_max_len))
+		# src_pos_seq.append(get_pos_index_seq(sample.SrcWords, batch_src_max_len))
+		# src_loc_seq.append([i+1 for i in range(len(sample.SrcWords))] +
+		# 				   [0 for i in range(batch_src_max_len - len(sample.SrcWords))])
+
+		encoded_dict = tokenizer.encode_plus(
+										tokenizer.convert_tokens_to_string(sample.SrcWords),	# Sentence to encode.
+										add_special_tokens=True,								# Add '[CLS]' and '[SEP]'
+										max_length=batch_src_max_len+2,							# Pad & truncate all sentences.
+										pad_to_max_length=True,
+										truncation= True,			
+										return_attention_mask=True,								# Construct attn. masks.
+										# return_tensors='pt'									# Return pytorch tensors.
+									)
+		src_words_list.append(encoded_dict['input_ids'])
+		src_words_mask_list.append(encoded_dict['attention_mask'])
 
 		if is_training:
 			arg1_start_seq.append(get_padded_pointers(sample.TrgPointers, 0, batch_trg_max_len))
@@ -595,8 +610,11 @@ def get_batch_data(cur_samples, is_training=False):
 			arg1eweights.append(get_pointer_location(sample.TrgPointers, 1, batch_src_max_len, batch_trg_max_len))
 			arg2sweights.append(get_pointer_location(sample.TrgPointers, 2, batch_src_max_len, batch_trg_max_len))
 			arg2eweights.append(get_pointer_location(sample.TrgPointers, 3, batch_src_max_len, batch_trg_max_len))
+			
 			rel_seq.append(get_relation_index_seq(sample.TrgRels, batch_trg_max_len))
+			
 			decoder_input_list.append(get_relation_index_seq(sample.TrgRels, batch_trg_max_len))
+			
 			target_vec_seq.append(get_target_vec(sample.TrgPointers, sample.TrgRels, batch_src_max_len))
 			target_vec_mask_seq.append([0 for i in range(len(sample.TrgRels))] +
 									   [1 for i in range(batch_trg_max_len + 1 - len(sample.TrgRels))])
@@ -605,9 +623,9 @@ def get_batch_data(cur_samples, is_training=False):
 
 	return {'src_words': np.array(src_words_list, dtype=np.float32),
 			'src_words_mask': np.array(src_words_mask_list),
-			'src_chars': np.array(src_char_seq),
-			'src_pos_tags': np.array(src_pos_seq),
-			'src_loc': np.array(src_loc_seq),
+			# 'src_chars': np.array(src_char_seq),
+			# 'src_pos_tags': np.array(src_pos_seq),
+			# 'src_loc': np.array(src_loc_seq),
 			'decoder_input': np.array(decoder_input_list),
 			'arg1sweights': np.array(arg1sweights),
 			'arg1eweights': np.array(arg1eweights),
@@ -622,73 +640,73 @@ def get_batch_data(cur_samples, is_training=False):
 			'target_vec_mask': np.array(target_vec_mask_seq)}
 
 
-class WordEmbeddings(nn.Module):
-	def __init__(self, vocab_size, embed_dim, drop_out_rate):
-		super(WordEmbeddings, self).__init__()
-		self.embeddings = nn.Embedding(vocab_size, embed_dim, padding_idx=0)
-		if job_mode == 'train':
-			self.embeddings.weight.data.copy_(torch.from_numpy(word_embed_matrix))
-		self.embeddings.weight.requires_grad = False
-		self.dropout = nn.Dropout(drop_out_rate)
+# class WordEmbeddings(nn.Module):
+# 	def __init__(self, vocab_size, embed_dim, drop_out_rate):
+# 		super(WordEmbeddings, self).__init__()
+# 		self.embeddings = nn.Embedding(vocab_size, embed_dim, padding_idx=0)
+# 		if job_mode == 'train':
+# 			self.embeddings.weight.data.copy_(torch.from_numpy(word_embed_matrix))
+# 		self.embeddings.weight.requires_grad = False
+# 		self.dropout = nn.Dropout(drop_out_rate)
 
-	def forward(self, words_seq):
-		word_embeds = self.embeddings(words_seq)
-		word_embeds = self.dropout(word_embeds)
-		return word_embeds
+# 	def forward(self, words_seq):
+# 		word_embeds = self.embeddings(words_seq)
+# 		word_embeds = self.dropout(word_embeds)
+# 		return word_embeds
 
-	def weight(self):
-		return self.embeddings.weight
-
-
-class CharEmbeddings(nn.Module):
-	def __init__(self, vocab_size, embed_dim, drop_out_rate):
-		super(CharEmbeddings, self).__init__()
-		self.embeddings = nn.Embedding(vocab_size, embed_dim, padding_idx=0)
-		# self.conv_layers = nn.ModuleList()
-		# self.max_pool_layers = nn.ModuleList()
-		# for i in range(len(conv_filters)):
-		#     self.conv_layers.append(nn.Conv1d(char_embed_dim, int(char_feature_size / 3), conv_filters[i]))
-		#     self.max_pool_layers.append(nn.MaxPool1d(max_word_len + conv_filters[i] - 1,
-		#                                              max_word_len + conv_filters[i] - 1))
-		self.conv1d = nn.Conv1d(char_embed_dim, char_feature_size, 3)
-		self.max_pool = nn.MaxPool1d(max_word_len + conv_filter_size - 1, max_word_len + conv_filter_size - 1)
-		self.dropout = nn.Dropout(drop_out_rate)
-
-	def forward(self, char_seq):
-		char_embeds = self.embeddings(char_seq)
-		char_embeds = self.dropout(char_embeds)
-		char_embeds = char_embeds.permute(0, 2, 1)
-		char_feature = torch.tanh(self.max_pool(self.conv1d(char_embeds)))
-		char_feature = char_feature.permute(0, 2, 1)
-		# for i in range(1, len(conv_filters)):
-		#     cur_char_feature = torch.tanh(self.max_pool_layers[i](self.conv_layers[i](char_embeds)))
-		#     cur_char_feature = cur_char_feature.permute(0, 2, 1)
-		#     char_feature = torch.cat((char_feature, cur_char_feature), -1)
-		return char_feature
+# 	def weight(self):
+# 		return self.embeddings.weight
 
 
-class POSEmbeddings(nn.Module):
-	def __init__(self, tag_len, tag_dim, drop_out_rate):
-		super(POSEmbeddings, self).__init__()
-		self.embeddings = nn.Embedding(tag_len, tag_dim, padding_idx=0)
-		self.dropout = nn.Dropout(drop_out_rate)
+# class CharEmbeddings(nn.Module):
+# 	def __init__(self, vocab_size, embed_dim, drop_out_rate):
+# 		super(CharEmbeddings, self).__init__()
+# 		self.embeddings = nn.Embedding(vocab_size, embed_dim, padding_idx=0)
+# 		# self.conv_layers = nn.ModuleList()
+# 		# self.max_pool_layers = nn.ModuleList()
+# 		# for i in range(len(conv_filters)):
+# 		#     self.conv_layers.append(nn.Conv1d(char_embed_dim, int(char_feature_size / 3), conv_filters[i]))
+# 		#     self.max_pool_layers.append(nn.MaxPool1d(max_word_len + conv_filters[i] - 1,
+# 		#                                              max_word_len + conv_filters[i] - 1))
+# 		self.conv1d = nn.Conv1d(char_embed_dim, char_feature_size, 3)
+# 		self.max_pool = nn.MaxPool1d(max_word_len + conv_filter_size - 1, max_word_len + conv_filter_size - 1)
+# 		self.dropout = nn.Dropout(drop_out_rate)
 
-	def forward(self, pos_seq):
-		pos_embeds = self.embeddings(pos_seq)
-		pos_embeds = self.dropout(pos_embeds)
-		return pos_embeds
+# 	def forward(self, char_seq):
+# 		char_embeds = self.embeddings(char_seq)
+# 		char_embeds = self.dropout(char_embeds)
+# 		char_embeds = char_embeds.permute(0, 2, 1)
+# 		char_feature = torch.tanh(self.max_pool(self.conv1d(char_embeds)))
+# 		char_feature = char_feature.permute(0, 2, 1)
+# 		# for i in range(1, len(conv_filters)):
+# 		#     cur_char_feature = torch.tanh(self.max_pool_layers[i](self.conv_layers[i](char_embeds)))
+# 		#     cur_char_feature = cur_char_feature.permute(0, 2, 1)
+# 		#     char_feature = torch.cat((char_feature, cur_char_feature), -1)
+# 		return char_feature
 
 
-class LocEmbeddings(nn.Module):
-	def __init__(self, embed_size, embed_dim, drop_out_rate):
-		super(LocEmbeddings, self).__init__()
-		self.embeddings = nn.Embedding(embed_size, embed_dim, padding_idx=0)
-		self.dropout = nn.Dropout(drop_out_rate)
+# class POSEmbeddings(nn.Module):
+# 	def __init__(self, tag_len, tag_dim, drop_out_rate):
+# 		super(POSEmbeddings, self).__init__()
+# 		self.embeddings = nn.Embedding(tag_len, tag_dim, padding_idx=0)
+# 		self.dropout = nn.Dropout(drop_out_rate)
 
-	def forward(self, loc_seq):
-		loc_embeds = self.embeddings(loc_seq)
-		loc_embeds = self.dropout(loc_embeds)
-		return loc_embeds
+# 	def forward(self, pos_seq):
+# 		pos_embeds = self.embeddings(pos_seq)
+# 		pos_embeds = self.dropout(pos_embeds)
+# 		return pos_embeds
+
+
+# class LocEmbeddings(nn.Module):
+# 	def __init__(self, embed_size, embed_dim, drop_out_rate):
+# 		super(LocEmbeddings, self).__init__()
+# 		self.embeddings = nn.Embedding(embed_size, embed_dim, padding_idx=0)
+# 		self.dropout = nn.Dropout(drop_out_rate)
+
+# 	def forward(self, loc_seq):
+# 		loc_embeds = self.embeddings(loc_seq)
+# 		loc_embeds = self.dropout(loc_embeds)
+# 		return loc_embeds
 
 
 class Attention(nn.Module):
@@ -742,50 +760,77 @@ def get_vec(arg1s, arg1e, arg2s, arg2e, rel):
 
 
 class Encoder(nn.Module):
-	def __init__(self, input_dim, hidden_dim, layers, is_bidirectional, drop_out_rate):
+	# def __init__(self, input_dim, hidden_dim, layers, is_bidirectional, drop_out_rate):
+	def __init__(self, drop_out_rate):
 		super(Encoder, self).__init__()
-		self.input_dim = input_dim
-		self.hidden_dim = hidden_dim
-		self.layers = layers
-		self.is_bidirectional = is_bidirectional
+		
+		# self.input_dim = input_dim
+		# self.hidden_dim = hidden_dim
+		# self.layers = layers
+		# self.is_bidirectional = is_bidirectional
+
 		self.drop_rate = drop_out_rate
-		self.word_embeddings = WordEmbeddings(len(word_vocab), word_embed_dim, drop_rate)
-		if use_char_embed:
-			self.char_embeddings = CharEmbeddings(len(char_vocab), char_embed_dim, drop_rate)
-		if use_pos_tags:
-			self.pos_embeddings = POSEmbeddings(len(pos_vocab), pos_tag_dim, drop_rate)
-		if use_loc_embed:
-			self.loc_embeddings = LocEmbeddings(max_src_len + 1, loc_embed_dim, drop_rate)
-		if enc_type == 'LSTM':
-			self.lstm = nn.LSTM(self.input_dim, self.hidden_dim, self.layers, batch_first=True,
-								bidirectional=self.is_bidirectional, dropout=drop_out_rate)
+
+		# self.word_embeddings = WordEmbeddings(len(word_vocab), word_embed_dim, drop_rate)
+		# if use_char_embed:
+		# 	self.char_embeddings = CharEmbeddings(len(char_vocab), char_embed_dim, drop_rate)
+		# if use_pos_tags:
+		# 	self.pos_embeddings = POSEmbeddings(len(pos_vocab), pos_tag_dim, drop_rate)
+		# if use_loc_embed:
+		# 	self.loc_embeddings = LocEmbeddings(max_src_len + 1, loc_embed_dim, drop_rate)
+		# if enc_type == 'LSTM':
+		# 	self.lstm = nn.LSTM(self.input_dim, self.hidden_dim, self.layers, batch_first=True,
+		# 						bidirectional=self.is_bidirectional, dropout=drop_out_rate)
+
+		if enc_type == 'BERT':
+			self.BERT_model = BertModel.from_pretrained("bert-base-uncased", output_attentions=True, output_hidden_states=False)
 
 		self.dropout = nn.Dropout(self.drop_rate)
 
-	def forward(self, words, chars, pos_seq, loc_seq, adv=None, is_training=False):
-		src_word_embeds = self.word_embeddings(words)
-		if adv is not None:
-			batch_len = src_word_embeds.size()[0]
-			seq_len = src_word_embeds.size()[1]
-			adv = adv.unsqueeze(0).repeat(batch_len, 1, 1)
-			adv = torch.index_select(adv.view(-1, word_embed_dim), 0,
-									 words.data.view(-1)).view(batch_len, seq_len, -1)
-			src_word_embeds.data = src_word_embeds.data + adv
+	
+	# def forward(self, words, chars, pos_seq, loc_seq, adv=None, is_training=False):
+	def forward(self, features, masks, adv=None, is_training=False):
+		# src_word_embeds = self.word_embeddings(words)
+		# if adv is not None:
+		# 	batch_len = src_word_embeds.size()[0]
+		# 	seq_len = src_word_embeds.size()[1]
+		# 	adv = adv.unsqueeze(0).repeat(batch_len, 1, 1)
+		# 	adv = torch.index_select(adv.view(-1, word_embed_dim), 0,
+		# 							 words.data.view(-1)).view(batch_len, seq_len, -1)
+		# 	src_word_embeds.data = src_word_embeds.data + adv
 
-		words_input = src_word_embeds
-		if use_char_embed:
-			char_feature = self.char_embeddings(chars)
-			words_input = torch.cat((words_input, char_feature), -1)
-		if use_pos_tags:
-			src_pos_embeds = self.pos_embeddings(pos_seq)
-			words_input = torch.cat((words_input, src_pos_embeds), -1)
-		if use_loc_embed:
-			src_loc_embeds = self.loc_embeddings(loc_seq)
-			words_input = torch.cat((words_input, src_loc_embeds), -1)
+		# words_input = src_word_embeds
+		# if use_char_embed:
+		# 	char_feature = self.char_embeddings(chars)
+		# 	words_input = torch.cat((words_input, char_feature), -1)
+		# if use_pos_tags:
+		# 	src_pos_embeds = self.pos_embeddings(pos_seq)
+		# 	words_input = torch.cat((words_input, src_pos_embeds), -1)
+		# if use_loc_embed:
+		# 	src_loc_embeds = self.loc_embeddings(loc_seq)
+		# 	words_input = torch.cat((words_input, src_loc_embeds), -1)
 
-		# words_input = torch.cat((src_word_embeds, char_feature, src_pos_embeds), -1)
-		outputs, hc = self.lstm(words_input)
-		outputs = self.dropout(outputs)
+		# # words_input = torch.cat((src_word_embeds, char_feature, src_pos_embeds), -1)
+		# outputs, hc = self.lstm(words_input)
+		# outputs = self.dropout(outputs)		
+		# return outputs
+
+		bert_outputs = self.BERT_model(input_ids=features, attention_mask=masks)
+		hidden_states = bert_outputs[0]
+		seq_len = masks.sum(1)
+		outputs = torch.zeros(hidden_states.size()[0], hidden_states.size()[1]-2, hidden_states.size()[2])
+		for i in range(hidden_states.size()[0]):
+			between_CLS_SEP = hidden_states[i][1:seq_len[i]-1, :]
+			padded_emb = hidden_states[i][seq_len[i]:hidden_states.size()[1], :]
+			padded_word_seq = torch.cat((between_CLS_SEP, padded_emb), dim=0)
+			outputs[i] = padded_word_seq
+		
+		# print(outputs.size())
+		# print(outputs.permute(1,0,2).size())
+		# outputs = outputs.permute(1,0,2)
+		
+		outputs = autograd.Variable(outputs.cuda())
+		
 		return outputs
 
 
@@ -828,7 +873,9 @@ class Decoder(nn.Module):
 		self.ap_end_lin = nn.Linear(pointer_net_hidden_size, 1)
 		self.op_start_lin = nn.Linear(pointer_net_hidden_size, 1)
 		self.op_end_lin = nn.Linear(pointer_net_hidden_size, 1)
+		
 		# self.sent_cnn = cnn()
+		
 		if use_sentiment_attention:
 			self.sent_att = Sentiment_Attention(enc_hidden_size, 2 * pointer_net_hidden_size)
 			self.sent_lin = nn.Linear(dec_hidden_size + 4 * pointer_net_hidden_size + 2 * enc_hidden_size,
@@ -837,6 +884,7 @@ class Decoder(nn.Module):
 			self.sent_lin = nn.Linear(dec_hidden_size + 4 * pointer_net_hidden_size, len(relnameToIdx))
 		self.dropout = nn.Dropout(self.drop_rate)
 
+	
 	def forward(self, prev_tuples, h_prev, enc_hs, src_mask, ap_start_wts, ap_end_wts, op_start_wts, op_end_wts,
 				is_training=False):
 		src_time_steps = enc_hs.size()[1]
@@ -955,20 +1003,32 @@ class Decoder(nn.Module):
 class Seq2SeqModel(nn.Module):
 	def __init__(self):
 		super(Seq2SeqModel, self).__init__()
-		self.encoder = Encoder(enc_inp_size, int(enc_hidden_size/2), 1, True, drop_rate)
+		# self.encoder = Encoder(enc_inp_size, int(enc_hidden_size/2), 1, True, drop_rate)
+		self.encoder = Encoder(drop_rate)
 		self.decoder = Decoder(dec_inp_size, dec_hidden_size, 1, drop_rate, max_trg_len)
 		# self.relation_embeddings = nn.Embedding(len(relnameToIdx), rel_embed_dim)
 		self.dropout = nn.Dropout(drop_rate)
 
-	def forward(self, src_words_seq, src_mask, src_char_seq, pos_seq, loc_seq, trg_words_seq, trg_seq_len,
+	# def forward(self, src_words_seq, src_mask, src_char_seq, pos_seq, loc_seq, trg_words_seq, trg_seq_len,
+	# 			arg1swts, arg1ewts, arg2swts, arg2ewts, adv=None, is_training=False):
+
+	def forward(self, src_words_seq, s_mask, trg_words_seq, trg_seq_len,
 				arg1swts, arg1ewts, arg2swts, arg2ewts, adv=None, is_training=False):
 		# if is_training:
 		#     trg_word_embeds = self.dropout(self.relation_embeddings(trg_words_seq))
+		
 		batch_len = src_words_seq.size()[0]
 		src_seq_len = src_words_seq.size()[1]
-		# trg_seq_len = trg_rel_cnt
+		src_seq_len -= 2 # [CLS] and [SEP] removed
+		# # trg_seq_len = trg_rel_cnt
 
-		enc_hs = self.encoder(src_words_seq, src_char_seq, pos_seq, loc_seq, adv, is_training)
+		# enc_hs = self.encoder(src_words_seq, src_char_seq, pos_seq, loc_seq, adv, is_training)
+		enc_hs = self.encoder(src_words_seq, s_mask, adv, is_training)
+		s_mask = s_mask[:,2:]
+		src_mask = s_mask.clone()
+		src_mask[s_mask==0] = 1
+		src_mask[s_mask!=0] = 0
+		src_mask = autograd.Variable(src_mask.cuda())
 
 		h0 = autograd.Variable(torch.FloatTensor(torch.zeros(batch_len, dec_hidden_size))).cuda()
 		c0 = autograd.Variable(torch.FloatTensor(torch.zeros(batch_len, dec_hidden_size))).cuda()
@@ -1083,27 +1143,32 @@ def predict(samples, model, model_id):
 		src_words_seq = torch.from_numpy(cur_samples_input['src_words'].astype('long'))
 		src_words_mask = torch.from_numpy(cur_samples_input['src_words_mask'].astype('bool'))
 		trg_words_seq = torch.from_numpy(cur_samples_input['decoder_input'].astype('long'))
-		src_chars_seq = torch.from_numpy(cur_samples_input['src_chars'].astype('long'))
-		src_pos_tags = torch.from_numpy(cur_samples_input['src_pos_tags'].astype('long'))
-		src_loc = torch.from_numpy(cur_samples_input['src_loc'].astype('long'))
+
+		# src_chars_seq = torch.from_numpy(cur_samples_input['src_chars'].astype('long'))
+		# src_pos_tags = torch.from_numpy(cur_samples_input['src_pos_tags'].astype('long'))
+		# src_loc = torch.from_numpy(cur_samples_input['src_loc'].astype('long'))
 
 		src_words_seq = autograd.Variable(src_words_seq.cuda())
 		src_words_mask = autograd.Variable(src_words_mask.cuda())
 		trg_words_seq = autograd.Variable(trg_words_seq.cuda())
-		src_chars_seq = autograd.Variable(src_chars_seq.cuda())
-		src_pos_tags = autograd.Variable(src_pos_tags.cuda())
-		src_loc = autograd.Variable(src_loc.cuda())
+		
+		# src_chars_seq = autograd.Variable(src_chars_seq.cuda())
+		# src_pos_tags = autograd.Variable(src_pos_tags.cuda())
+		# src_loc = autograd.Variable(src_loc.cuda())
 
 		with torch.no_grad():
 			if model_id == 1:
-				outputs = model(src_words_seq, src_words_mask, src_chars_seq, src_pos_tags, src_loc,
-								trg_words_seq, max_trg_len, None, None, None, None, None, False)
+				# outputs = model(src_words_seq, src_words_mask, src_chars_seq, src_pos_tags, src_loc,
+				# 				trg_words_seq, max_trg_len, None, None, None, None, None, False)
+
+				outputs = model(src_words_seq, src_words_mask, trg_words_seq, max_trg_len, None, None, None, None, None, False)
 
 		rel += list(outputs[0].data.cpu().numpy())
 		arg1s += list(outputs[1].data.cpu().numpy())
 		arg1e += list(outputs[2].data.cpu().numpy())
 		arg2s += list(outputs[3].data.cpu().numpy())
 		arg2e += list(outputs[4].data.cpu().numpy())
+		
 		model.zero_grad()
 
 	end_time = datetime.datetime.now()
@@ -1136,7 +1201,7 @@ def train_model(model_id, train_samples, dev_samples, test_samples, best_model_f
 	vec_criterion = nn.MSELoss()
 
 	custom_print('weight factor:', wf)
-	optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=0.00001)
+	optimizer = optim.Adam(model.parameters(), lr=0.0001, weight_decay=0.00001)
 	custom_print(optimizer)
 
 	best_dev_acc = -1.0
@@ -1167,9 +1232,10 @@ def train_model(model_id, train_samples, dev_samples, test_samples, best_model_f
 			src_words_seq = torch.from_numpy(cur_samples_input['src_words'].astype('long'))
 			src_words_mask = torch.from_numpy(cur_samples_input['src_words_mask'].astype('bool'))
 			trg_words_seq = torch.from_numpy(cur_samples_input['decoder_input'].astype('long'))
-			src_chars_seq = torch.from_numpy(cur_samples_input['src_chars'].astype('long'))
-			src_pos_tags = torch.from_numpy(cur_samples_input['src_pos_tags'].astype('long'))
-			src_loc = torch.from_numpy(cur_samples_input['src_loc'].astype('long'))
+			
+			# src_chars_seq = torch.from_numpy(cur_samples_input['src_chars'].astype('long'))
+			# src_pos_tags = torch.from_numpy(cur_samples_input['src_pos_tags'].astype('long'))
+			# src_loc = torch.from_numpy(cur_samples_input['src_loc'].astype('long'))
 
 			arg1sweights = torch.from_numpy(cur_samples_input['arg1sweights'].astype('float32'))
 			arg1eweights = torch.from_numpy(cur_samples_input['arg1eweights'].astype('float32'))
@@ -1187,9 +1253,10 @@ def train_model(model_id, train_samples, dev_samples, test_samples, best_model_f
 			src_words_seq = autograd.Variable(src_words_seq.cuda())
 			src_words_mask = autograd.Variable(src_words_mask.cuda())
 			trg_words_seq = autograd.Variable(trg_words_seq.cuda())
-			src_chars_seq = autograd.Variable(src_chars_seq.cuda())
-			src_pos_tags = autograd.Variable(src_pos_tags.cuda())
-			src_loc = autograd.Variable(src_loc.cuda())
+			
+			# src_chars_seq = autograd.Variable(src_chars_seq.cuda())
+			# src_pos_tags = autograd.Variable(src_pos_tags.cuda())
+			# src_loc = autograd.Variable(src_loc.cuda())
 
 			arg1sweights = autograd.Variable(arg1sweights.cuda())
 			arg1eweights = autograd.Variable(arg1eweights.cuda())
@@ -1204,10 +1271,14 @@ def train_model(model_id, train_samples, dev_samples, test_samples, best_model_f
 			trg_vec = autograd.Variable(trg_vec.cuda())
 			trg_vec_mask = autograd.Variable(trg_vec_mask.cuda())
 			trg_seq_len = rel.size()[1]
+			
 			if model_id == 1:
-				outputs = model(src_words_seq, src_words_mask, src_chars_seq, src_pos_tags, src_loc,
-								trg_words_seq, trg_seq_len, arg1sweights, arg1eweights, arg2sweights,
-								arg2eweights, None, True)
+				# outputs = model(src_words_seq, src_words_mask, src_chars_seq, src_pos_tags, src_loc,
+				# 				trg_words_seq, trg_seq_len, arg1sweights, arg1eweights, arg2sweights,
+				# 				arg2eweights, None, True)
+
+				outputs = model(src_words_seq, src_words_mask, trg_words_seq, trg_seq_len, 
+								arg1sweights, arg1eweights, arg2sweights, arg2eweights, None, True)
 
 			rel = rel.view(-1, 1).squeeze()
 			arg1s = arg1s.view(-1, 1).squeeze()
@@ -1317,67 +1388,65 @@ if __name__ == "__main__":
 	model_name = 1
 	job_mode = sys.argv[5]
 
-	use_char_embed = True
-	use_pos_tags = True
-
-	use_loc_embed = False
-	use_sentiment_attention = False
-
-	use_nr_triplets = False
-	use_data_aug = False  # bool(int(sys.argv[6]))
-	lower_cased = False
-	gen_directions = ['AspectFirst', 'OpinionFirst', 'BothWays']
-	gen_direct = gen_directions[0]
-
-	use_adv = False  # bool(int(sys.argv[8]))
-	adv_eps = 0.01  # float(sys.argv[9])
-	rel_th = 0.5
-
-	batch_size = int(sys.argv[6])     # 10
-	num_epoch = int(sys.argv[7])     # 30 for each dataset separately and 100 for res_all
+	batch_size = int(sys.argv[6])	# 10
+	num_epoch = int(sys.argv[7])	# 30 for each dataset separately and 100 for res_all
 	drop_rate = 0.5
 	early_stop_cnt = num_epoch
-	# loss_eps = 0.01
 
-	use_gold_location = False   # bool(int(sys.argv[7]))
-	use_vec_loss = False
-	# run = sys.argv[5]
+	use_sentiment_attention = False
+	use_nr_triplets = False
+	use_data_aug = False	# bool(int(sys.argv[8]))
 
+	use_adv = False	# bool(int(sys.argv[9]))
+	adv_eps = 0.01	# float(sys.argv[10])
+	rel_th = 0.5	
+
+	use_gold_location = False	# bool(int(sys.argv[11]))
+	use_vec_loss = False	# bool(int(sys.argv[12]))
+	use_hadamard = False	# bool(int(sys.argv[13]))
+	
 	max_src_len = 100
 	max_trg_len = 10
 	max_nr_cnt = 10
 	if use_nr_triplets:
 		max_trg_len += max_nr_cnt
-	# embedding_file = 'cased_glove300.txt'
-	embedding_file = os.path.join(src_data_folder, 'w2v.txt')
-	update_freq = 1
+	
 	wf = 1
 	att_type = 2
-	max_dist = 10
+	# max_dist = 10
+	
+	gen_directions = ['AspectFirst', 'OpinionFirst', 'BothWays']
+	gen_direct = gen_directions[0]
+	enc_type = ['LSTM', 'GCN', 'LSTM-GCN', 'BERT'][-1]
 
-	use_hadamard = False  # bool(int(sys.argv[13]))
-	enc_type = ['LSTM', 'GCN', 'LSTM-GCN'][0]
+	# embedding_file = 'cased_glove300.txt'
+	# embedding_file = os.path.join(src_data_folder, 'w2v.txt')
 
-	word_embed_dim = 300
-	word_min_freq = 10
+	# lower_cased = False
+	# use_char_embed = True
+	# use_pos_tags = True
+	# use_loc_embed = False
 
-	char_embed_dim = 25
-	pos_tag_dim = 25
-	char_feature_size = 25
-	conv_filter_size = 3
-	max_word_len = 25
+	# word_embed_dim = 300
+	# word_min_freq = 10
+	# char_embed_dim = 25
+	# pos_tag_dim = 25
+	# char_feature_size = 25
+	# conv_filter_size = 3
+	# max_word_len = 25
+	# loc_embed_dim = 25
 
-	loc_embed_dim = 25
 	rel_embed_dim = 25
 
-	enc_inp_size = word_embed_dim
-	if use_char_embed:
-		enc_inp_size += char_feature_size
-	if use_pos_tags:
-		enc_inp_size += pos_tag_dim
-	if use_loc_embed:
-		enc_inp_size += loc_embed_dim
-	enc_hidden_size = 300
+	# enc_inp_size = word_embed_dim
+	# if use_char_embed:
+	# 	enc_inp_size += char_feature_size
+	# if use_pos_tags:
+	# 	enc_inp_size += pos_tag_dim
+	# if use_loc_embed:
+	# 	enc_inp_size += loc_embed_dim
+	
+	enc_hidden_size = 768
 	dec_inp_size = enc_hidden_size
 	dec_hidden_size = dec_inp_size
 	pointer_net_hidden_size = enc_hidden_size
@@ -1395,15 +1464,15 @@ if __name__ == "__main__":
 		custom_print('loading data......')
 		model_file_name = os.path.join(trg_data_folder, 'model.h5py')
 
-		src_train_file = os.path.join(src_data_folder, 'train.sent')
-		trg_train_file = os.path.join(src_data_folder, 'train.pointer')
-		trg_nr_train_file = os.path.join(src_data_folder, 'train.pointer')
+		src_train_file = os.path.join(src_data_folder, 'trainb.sent')
+		trg_train_file = os.path.join(src_data_folder, 'trainb.pointer')
+		trg_nr_train_file = os.path.join(src_data_folder, 'trainb.pointer')
 		train_data = read_data(src_train_file, trg_train_file, trg_nr_train_file, 1)
 
 		# train_data = train_data[:100]
 
-		src_dev_file = os.path.join(src_data_folder, 'dev.sent')
-		trg_dev_file = os.path.join(src_data_folder, 'dev.pointer')
+		src_dev_file = os.path.join(src_data_folder, 'devb.sent')
+		trg_dev_file = os.path.join(src_data_folder, 'devb.pointer')
 		dev_data = read_data(src_dev_file, trg_dev_file, '', 2)
 
 		# train_dev = old_train_data + old_dev_data
@@ -1412,8 +1481,8 @@ if __name__ == "__main__":
 		# dev_data = train_dev[:cut_point]
 		# train_data = train_dev[cut_point:]
 
-		src_test_file = os.path.join(src_data_folder, 'test.sent')
-		trg_test_file = os.path.join(src_data_folder, 'test.pointer')
+		src_test_file = os.path.join(src_data_folder, 'testb.sent')
+		trg_test_file = os.path.join(src_data_folder, 'testb.pointer')
 		test_data = read_data(src_test_file, trg_test_file, '', 3)
 
 		custom_print('Training data size:', len(train_data))
@@ -1422,14 +1491,14 @@ if __name__ == "__main__":
 
 		# all_data = train_data + dev_data + test_data
 
-		custom_print("preparing vocabulary......")
-		save_vocab = os.path.join(trg_data_folder, 'vocab.pkl')
+		# custom_print("preparing vocabulary......")
+		# save_vocab = os.path.join(trg_data_folder, 'vocab.pkl')
 
-		custom_print("getting pos tags......")
-		pos_vocab = build_tags(src_train_file, src_dev_file, src_test_file)
+		# custom_print("getting pos tags......")
+		# pos_vocab = build_tags(src_train_file, src_dev_file, src_test_file)
 
-		word_vocab, char_vocab, word_embed_matrix = build_vocab(train_data, dev_data, test_data,
-																save_vocab, embedding_file)
+		# word_vocab, char_vocab, word_embed_matrix = build_vocab(train_data, dev_data, test_data,
+		# 														save_vocab, embedding_file)
 
 		custom_print("Training started......")
 		train_model(model_name, train_data, dev_data, test_data, model_file_name)
@@ -1438,12 +1507,13 @@ if __name__ == "__main__":
 	if job_mode == 'test':
 		logger = open(os.path.join(trg_data_folder, 'test.log'), 'w')
 		custom_print(sys.argv)
-		custom_print("loading word vectors......")
-		vocab_file_name = os.path.join(trg_data_folder, 'vocab.pkl')
-		word_vocab, char_vocab, pos_vocab = load_vocab(vocab_file_name)
+		# custom_print("loading word vectors......")
+		
+		# vocab_file_name = os.path.join(trg_data_folder, 'vocab.pkl')
+		# word_vocab, char_vocab, pos_vocab = load_vocab(vocab_file_name)
 
-		# word_embed_matrix = np.zeros((len(word_vocab), word_embed_dim), dtype=np.float32)
-		custom_print('vocab size:', len(word_vocab))
+		# # word_embed_matrix = np.zeros((len(word_vocab), word_embed_dim), dtype=np.float32)
+		# custom_print('vocab size:', len(word_vocab))
 
 		model_file = os.path.join(trg_data_folder, 'model.h5py')
 
@@ -1456,13 +1526,12 @@ if __name__ == "__main__":
 		best_model.load_state_dict(torch.load(model_file))
 
 		custom_print('\nTest Results\n')
-		src_test_file = os.path.join(src_data_folder, 'test.sent')
-		trg_test_file = os.path.join(src_data_folder, 'test.pointer')
-		# adj_test_file = os.path.join(src_data_folder, 'test.dep')
+		src_test_file = os.path.join(src_data_folder, 'testb.sent')
+		trg_test_file = os.path.join(src_data_folder, 'testb.pointer')
 		test_data = read_data(src_test_file, trg_test_file, '', 3)
 		custom_print('Test data size:', len(test_data))
 
-		reader = open(os.path.join(src_data_folder, 'test.tup'))
+		reader = open(os.path.join(src_data_folder, 'testb.tup'))
 		test_gt_lines = reader.readlines()
 		reader.close()
 
