@@ -1029,6 +1029,8 @@ class Seq2SeqModel(nn.Module):
 		src_mask[s_mask==0] = 1
 		src_mask[s_mask!=0] = 0
 		src_mask = autograd.Variable(src_mask.cuda())
+		print(enc_hs.size())
+		print(src_mask.size())
 
 		h0 = autograd.Variable(torch.FloatTensor(torch.zeros(batch_len, dec_hidden_size))).cuda()
 		c0 = autograd.Variable(torch.FloatTensor(torch.zeros(batch_len, dec_hidden_size))).cuda()
