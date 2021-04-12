@@ -816,6 +816,7 @@ class Encoder(nn.Module):
 		# return outputs
 
 		bert_outputs = self.BERT_model(input_ids=features, attention_mask=masks)
+		print("Here")
 		hidden_states = bert_outputs[0]
 		seq_len = masks.sum(1)
 		outputs = torch.zeros(hidden_states.size()[0], hidden_states.size()[1]-2, hidden_states.size()[2])
