@@ -1136,7 +1136,7 @@ def predict(samples, model, model_id):
 	arg2s = list()
 	arg2e = list()
 	model.eval()
-	# set_random_seeds(random_seed)
+	set_random_seeds(random_seed)
 	start_time = datetime.datetime.now()
 	for batch_idx in tqdm(range(0, batch_count)):
 		batch_start = batch_idx * pred_batch_size
@@ -1355,7 +1355,9 @@ def train_model(model_id, train_samples, dev_samples, test_samples, best_model_f
 		p = float(correct_pos) / (pred_pos + 1e-8)
 		r = float(correct_pos) / (gt_pos + 1e-8)
 		dev_acc = (2 * p * r) / (p + r + 1e-8)
-		custom_print('F1:', dev_acc)
+		custom_print('Dev P:', round(p, 3))
+		custom_print('Dev R:', round(r, 3))
+		custom_print('Dev F1:', round(dev_acc, 3))
 
 		if dev_acc >= best_dev_acc:
 			best_epoch_idx = epoch_idx + 1
@@ -1373,7 +1375,9 @@ def train_model(model_id, train_samples, dev_samples, test_samples, best_model_f
 		p = float(correct_pos) / (pred_pos + 1e-8)
 		r = float(correct_pos) / (gt_pos + 1e-8)
 		test_acc = (2 * p * r) / (p + r + 1e-8)
-		custom_print('Test F1:', test_acc)
+		custom_print('Test P:', round(p, 3))
+		custom_print('Test R:', round(r, 3))
+		custom_print('Test F1:', round(test_acc, 3))
 
 		custom_print('\n\n')
 		if epoch_idx + 1 - best_epoch_idx >= early_stop_cnt:
