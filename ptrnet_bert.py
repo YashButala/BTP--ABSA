@@ -1129,7 +1129,7 @@ def predict(samples, model, model_id):
 	arg2s = list()
 	arg2e = list()
 	model.eval()
-	set_random_seeds(random_seed)
+	# set_random_seeds(random_seed)
 	start_time = datetime.datetime.now()
 	for batch_idx in tqdm(range(0, batch_count)):
 		batch_start = batch_idx * pred_batch_size
@@ -1143,6 +1143,8 @@ def predict(samples, model, model_id):
 		src_words_seq = torch.from_numpy(cur_samples_input['src_words'].astype('long'))
 		src_words_mask = torch.from_numpy(cur_samples_input['src_words_mask'].astype('bool'))
 		trg_words_seq = torch.from_numpy(cur_samples_input['decoder_input'].astype('long'))
+		print(src_words_seq)
+		print(src_words_mask)
 
 		# src_chars_seq = torch.from_numpy(cur_samples_input['src_chars'].astype('long'))
 		# src_pos_tags = torch.from_numpy(cur_samples_input['src_pos_tags'].astype('long'))
