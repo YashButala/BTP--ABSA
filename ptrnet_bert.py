@@ -30,9 +30,9 @@ torch.autograd.set_detect_anomaly(True)
 def getTokenizer(bert_mode):
 	if bert_mode == 'gen':
 		tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
-	elif mode == 'lap':
+	elif bert_mode == 'lap':
 		tokenizer = BertTokenizer.from_pretrained('/home/rajdeep/laptop_pt/', do_lower_case=True)
-	elif mode == 'res':
+	elif bert_mode == 'res':
 		tokenizer = BertTokenizer.from_pretrained('/home/rajdeep/rest_pt/', do_lower_case=True)
 
 	return tokenizer
