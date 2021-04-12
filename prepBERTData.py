@@ -2,12 +2,15 @@ import sys
 import os
 from transformers import BertTokenizer
 
-if mode == 'gen':
-	tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
-elif mode == 'lap':
-	tokenizer = BertTokenizer.from_pretrained('/home/rajdeep/laptop_pt/', do_lower_case=True)
-elif mode == 'res':
-	tokenizer = BertTokenizer.from_pretrained('/home/rajdeep/rest_pt/', do_lower_case=True)
+def getTokenizer(mode):
+	if mode == 'gen':
+		tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
+	elif mode == 'lap':
+		tokenizer = BertTokenizer.from_pretrained('/home/rajdeep/laptop_pt/', do_lower_case=True)
+	elif mode == 'res':
+		tokenizer = BertTokenizer.from_pretrained('/home/rajdeep/rest_pt/', do_lower_case=True)
+
+	return tokenizer
 
 def getBERTData(n1, n2, n3, m1, m2, m3):
 	f1 = open(n1)
@@ -72,9 +75,9 @@ def getBERTData(n1, n2, n3, m1, m2, m3):
 		# print(new)        
 		# print(words)
 
-mode = 'gen'
 if __name__ == "__main__":
 	mode = sys.argv[1]
+	tokenizer = getTokenizer(mode)
 	dirs = ['/home/rajdeep/BTP--ASBA/14res/', '/home/rajdeep/BTP--ASBA/15res/', '/home/rajdeep/BTP--ASBA/16res/', 
 	'/home/rajdeep/BTP--ASBA/resall/', '/home/rajdeep/BTP--ASBA/lap14/']
 	if mode == 'lap':
