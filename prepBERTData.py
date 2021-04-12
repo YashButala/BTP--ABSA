@@ -4,16 +4,17 @@ from transformers import BertTokenizer
 
 def getTokenizer(mode):
 	if mode == 'gen':
-			tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
+		tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
 	elif mode == 'lap':
-			tokenizer = BertTokenizer.from_pretrained('/home/rajdeep/laptop_pt/', do_lower_case=True)
+		print("Getting Tokenizer PT for Laptop Domain:")
+		tokenizer = BertTokenizer.from_pretrained('/home/rajdeep/laptop_pt/', do_lower_case=True)
 	elif mode == 'res':
-			tokenizer = BertTokenizer.from_pretrained('/home/rajdeep/rest_pt/', do_lower_case=True)
+		print("Getting Tokenizer PT for Restaurant Domain:")
+		tokenizer = BertTokenizer.from_pretrained('/home/rajdeep/rest_pt/', do_lower_case=True)
 
 	return tokenizer
 
 def getBERTData(n1, n2, n3, m1, m2, m3):
-	print(os.getcwd())
 	f1 = open(n1)
 	f2 = open(n2)
 	f3 = open(n3)
@@ -71,10 +72,6 @@ def getBERTData(n1, n2, n3, m1, m2, m3):
 			else:
 					g2.write(' \n')
 					g3.write(' \n') 
-			
-			# print(pointer[:-3])
-			# print(new)        
-			# print(words)
 
 if __name__ == "__main__":
 	mode = sys.argv[1]
@@ -82,7 +79,7 @@ if __name__ == "__main__":
 	dirs = ['/home/rajdeep/BTP--ASBA/14res/', '/home/rajdeep/BTP--ASBA/15res/', '/home/rajdeep/BTP--ASBA/16res/', 
 	'/home/rajdeep/BTP--ASBA/resall/', '/home/rajdeep/BTP--ASBA/lap14/']
 	if mode == 'lap':
-		dirs = dirs[-1]
+		dirs = [dirs[-1]]
 	elif mode == 'res':
 		dirs = dirs[:-1]
 
