@@ -831,7 +831,6 @@ class Encoder(nn.Module):
 		# return outputs
 
 		bert_outputs = self.BERT_model(input_ids=features, attention_mask=masks)
-		print("Here")
 		hidden_states = bert_outputs[0]
 		seq_len = masks.sum(1)
 		outputs = torch.zeros(hidden_states.size()[0], hidden_states.size()[1]-2, hidden_states.size()[2])
@@ -1130,8 +1129,8 @@ def set_random_seeds(seed):
 	random.seed(seed)
 	np.random.seed(seed)
 	torch.manual_seed(seed)
-	if n_gpu > 1:
-		torch.cuda.manual_seed_all(seed)
+	# if n_gpu > 1:
+	# 	torch.cuda.manual_seed_all(seed)
 
 
 def predict(samples, model, model_id):
@@ -1213,8 +1212,8 @@ def train_model(model_id, train_samples, dev_samples, test_samples, best_model_f
 	custom_print(model)
 	if torch.cuda.is_available():
 		model.cuda()
-	if n_gpu > 1:
-		model = torch.nn.DataParallel(model)
+	# if n_gpu > 1:
+	# 	model = torch.nn.DataParallel(model)
 
 	rel_criterion = nn.NLLLoss(ignore_index=0)
 	pointer_criterion = nn.NLLLoss(ignore_index=-1)
@@ -1426,7 +1425,7 @@ def train_model(model_id, train_samples, dev_samples, test_samples, best_model_f
 if __name__ == "__main__":
 	os.environ['CUDA_VISIBLE_DEVICES'] = sys.argv[1]
 	random_seed = int(sys.argv[2])
-	n_gpu = torch.cuda.device_count()
+	# n_gpu = torch.cuda.device_count()
 	set_random_seeds(random_seed)
 
 	src_data_folder = sys.argv[3]
@@ -1590,8 +1589,8 @@ if __name__ == "__main__":
 		custom_print(best_model)
 		if torch.cuda.is_available():
 			best_model.cuda()
-		if n_gpu > 1:
-			best_model = torch.nn.DataParallel(best_model)
+		# if n_gpu > 1:
+		# 	best_model = torch.nn.DataParallel(best_model)
 		best_model.load_state_dict(torch.load(model_file))
 
 		custom_print('\nTest Results\n')
