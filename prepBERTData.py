@@ -86,10 +86,10 @@ if __name__ == "__main__":
 	for path in dirs:
 		os.chdir(path)
 		if mode == 'gen':
-				getBERTData('train.sent','train.tup','train.pointer','trainb.sent','trainb.tup','trainb.pointer')
-				getBERTData('dev.sent','dev.tup','dev.pointer','devb.sent','devb.tup','devb.pointer')
-				getBERTData('test.sent','test.tup','test.pointer','testb.sent','testb.tup','testb.pointer')
+			getBERTData('train.sent','train.tup','train.pointer','trainb.sent','trainb.tup','trainb.pointer')
+			getBERTData('dev.sent','dev.tup','dev.pointer','devb.sent','devb.tup','devb.pointer')
+			getBERTData('test.sent','test.tup','test.pointer','testb.sent','testb.tup','testb.pointer')
 		else:
-				getBERTData('train.sent','train.tup','train.pointer','trainb_pt.sent','trainb_pt.tup','trainb_pt.pointer')
-				getBERTData('dev.sent','dev.tup','dev.pointer','devb_pt.sent','devb_pt.tup','devb_pt.pointer')
-				getBERTData('test.sent','test.tup','test.pointer','testb_pt.sent','testb_pt.tup','testb_pt.pointer')
+			getBERTData('train.sent','train.tup','train.pointer','trainb_pt.sent','trainb_pt.tup','trainb_pt.pointer')
+			getBERTData('dev.sent','dev.tup','dev.pointer','devb_pt.sent','devb_pt.tup','devb_pt.pointer')
+			getBERTData('test.sent','test.tup','test.pointer','testb_pt.sent','testb_pt.tup','testb_pt.pointer')
