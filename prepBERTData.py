@@ -2,7 +2,7 @@ import sys
 import os
 from transformers import BertTokenizer
 
-if mode = 'gen':
+if mode == 'gen':
 	tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
 elif mode == 'lap':
 	tokenizer = BertTokenizer.from_pretrained('/home/rajdeep/laptop_pt/', do_lower_case=True)
@@ -72,6 +72,7 @@ def getBERTData(n1, n2, n3, m1, m2, m3):
 		# print(new)        
 		# print(words)
 
+mode = 'gen'
 if __name__ == "__main__":
 	mode = sys.argv[1]
 	dirs = ['/home/rajdeep/BTP--ASBA/14res/', '/home/rajdeep/BTP--ASBA/15res/', '/home/rajdeep/BTP--ASBA/16res/', 

@@ -22,7 +22,12 @@ import torch.optim as optim
 # from nltk.tokenize import SpaceTokenizer
 
 from transformers import *
-tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
+if bert_mode == 'gen':
+	tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
+elif mode == 'lap':
+	tokenizer = BertTokenizer.from_pretrained('/home/rajdeep/laptop_pt/', do_lower_case=True)
+elif mode == 'res':
+	tokenizer = BertTokenizer.from_pretrained('/home/rajdeep/rest_pt/', do_lower_case=True)
 
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
@@ -1034,8 +1039,8 @@ class Seq2SeqModel(nn.Module):
 		src_mask[s_mask==0] = 1
 		src_mask[s_mask!=0] = 0
 		src_mask = autograd.Variable(src_mask.cuda())
-		print(enc_hs.size())
-		print(src_mask.size())
+		# print(enc_hs.size())
+		# print(src_mask.size())
 
 		h0 = autograd.Variable(torch.FloatTensor(torch.zeros(batch_len, dec_hidden_size))).cuda()
 		c0 = autograd.Variable(torch.FloatTensor(torch.zeros(batch_len, dec_hidden_size))).cuda()
@@ -1119,8 +1124,8 @@ def set_random_seeds(seed):
 	random.seed(seed)
 	np.random.seed(seed)
 	torch.manual_seed(seed)
-	# if n_gpu > 1:
-	# 	torch.cuda.manual_seed_all(seed)
+	if n_gpu > 1:
+		torch.cuda.manual_seed_all(seed)
 
 
 def predict(samples, model, model_id):
@@ -1150,8 +1155,8 @@ def predict(samples, model, model_id):
 		src_words_seq = torch.from_numpy(cur_samples_input['src_words'].astype('long'))
 		src_words_mask = torch.from_numpy(cur_samples_input['src_words_mask'].astype('bool'))
 		trg_words_seq = torch.from_numpy(cur_samples_input['decoder_input'].astype('long'))
-		print(src_words_seq)
-		print(src_words_mask)
+		# print(src_words_seq)
+		# print(src_words_mask)
 
 		# src_chars_seq = torch.from_numpy(cur_samples_input['src_chars'].astype('long'))
 		# src_pos_tags = torch.from_numpy(cur_samples_input['src_pos_tags'].astype('long'))
@@ -1202,8 +1207,8 @@ def train_model(model_id, train_samples, dev_samples, test_samples, best_model_f
 	custom_print(model)
 	if torch.cuda.is_available():
 		model.cuda()
-	# if n_gpu > 1:
-	# 	model = torch.nn.DataParallel(model)
+	if n_gpu > 1:
+		model = torch.nn.DataParallel(model)
 
 	rel_criterion = nn.NLLLoss(ignore_index=0)
 	pointer_criterion = nn.NLLLoss(ignore_index=-1)
@@ -1387,7 +1392,7 @@ def train_model(model_id, train_samples, dev_samples, test_samples, best_model_f
 	custom_print('Best Epoch:', best_epoch_idx)
 	custom_print('Best Epoch Seed:', best_epoch_seed)
 
-
+bert_mode = 'gen'
 if __name__ == "__main__":
 	os.environ['CUDA_VISIBLE_DEVICES'] = sys.argv[1]
 	random_seed = int(sys.argv[2])
@@ -1400,9 +1405,10 @@ if __name__ == "__main__":
 		os.mkdir(trg_data_folder)
 	model_name = 1
 	job_mode = sys.argv[5]
+	bert_mode = sys.argv[6]
 
-	batch_size = int(sys.argv[6])	# 10
-	num_epoch = int(sys.argv[7])	# 30 for each dataset separately and 100 for res_all
+	batch_size = int(sys.argv[7])	# 10
+	num_epoch = int(sys.argv[8])	# 30 for each dataset separately and 100 for res_all
 	drop_rate = 0.5
 	early_stop_cnt = num_epoch
 
@@ -1536,8 +1542,8 @@ if __name__ == "__main__":
 		custom_print(best_model)
 		if torch.cuda.is_available():
 			best_model.cuda()
-		# if n_gpu > 1:
-		# 	best_model = torch.nn.DataParallel(best_model)
+		if n_gpu > 1:
+			best_model = torch.nn.DataParallel(best_model)
 		best_model.load_state_dict(torch.load(model_file))
 
 		custom_print('\nTest Results\n')
