@@ -16,9 +16,10 @@ import torch.autograd as autograd
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-import nltk
-nltk.download('averaged_perceptron_tagger')
-from nltk.tokenize import SpaceTokenizer
+
+# import nltk
+# nltk.download('averaged_perceptron_tagger')
+# from nltk.tokenize import SpaceTokenizer
 
 from transformers import *
 tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
@@ -783,7 +784,10 @@ class Encoder(nn.Module):
 		# 						bidirectional=self.is_bidirectional, dropout=drop_out_rate)
 
 		if enc_type == 'BERT':
-			self.BERT_model = BertModel.from_pretrained("bert-base-uncased", output_attentions=True, output_hidden_states=False)
+			if use_pretrained == 1:
+				self.BERT_model = BertModel.from_pretrained("bert-base-uncased", output_attentions=True, output_hidden_states=False)
+			else if use_posttrained == 1:
+				self.BERT_model = BertModel.from_pretrained("/home/rajdeep/laptop_pt/", output_attentions=True, output_hidden_states=False)
 
 		self.dropout = nn.Dropout(self.drop_rate)
 
@@ -1423,6 +1427,8 @@ if __name__ == "__main__":
 	gen_directions = ['AspectFirst', 'OpinionFirst', 'BothWays']
 	gen_direct = gen_directions[0]
 	enc_type = ['LSTM', 'GCN', 'LSTM-GCN', 'BERT'][-1]
+	use_pretrained = 0
+	use_posttrained = 1
 
 	# embedding_file = 'cased_glove300.txt'
 	# embedding_file = os.path.join(src_data_folder, 'w2v.txt')
