@@ -1396,7 +1396,7 @@ def train_model(model_id, train_samples, dev_samples, test_samples, best_model_f
 			best_test_r = test_r
 
 		# if dev_acc >= best_dev_acc:
-		if dev_r >= best_dev_acc:
+		if dev_p >= best_dev_acc:
 			best_epoch_idx = epoch_idx + 1
 			best_epoch_seed = cur_seed
 			best_p = test_p
@@ -1404,8 +1404,8 @@ def train_model(model_id, train_samples, dev_samples, test_samples, best_model_f
 			best_f1 = test_acc
 			custom_print('model saved......')
 			# best_dev_acc = dev_acc
-			best_dev_acc = dev_r
-			torch.save(model.state_dict(), best_model_file)
+			best_dev_acc = dev_p
+			# torch.save(model.state_dict(), best_model_file)
 
 		custom_print('\n\n')
 		if epoch_idx + 1 - best_epoch_idx >= early_stop_cnt:
