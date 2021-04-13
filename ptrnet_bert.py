@@ -1369,11 +1369,11 @@ def train_model(model_id, train_samples, dev_samples, test_samples, best_model_f
 
 		pred_pos, gt_pos, correct_pos = get_F1(dev_samples, dev_preds)
 		custom_print(pred_pos, '\t', gt_pos, '\t', correct_pos)
-		p = float(correct_pos) / (pred_pos + 1e-8)
-		r = float(correct_pos) / (gt_pos + 1e-8)
-		dev_acc = (2 * p * r) / (p + r + 1e-8)
-		custom_print('Dev P:', round(p, 3))
-		custom_print('Dev R:', round(r, 3))
+		dev_p = float(correct_pos) / (pred_pos + 1e-8)
+		dev_r = float(correct_pos) / (gt_pos + 1e-8)
+		dev_acc = (2 * dev_p * dev_r) / (dev_p + dev_r + 1e-8)
+		custom_print('Dev P:', round(dev_p, 3))
+		custom_print('Dev R:', round(dev_r, 3))
 		custom_print('Dev F1:', round(dev_acc, 3))
 
 		custom_print('\nTest Results\n')
@@ -1382,27 +1382,29 @@ def train_model(model_id, train_samples, dev_samples, test_samples, best_model_f
 
 		pred_pos, gt_pos, correct_pos = get_F1(test_samples, test_preds)
 		custom_print(pred_pos, '\t', gt_pos, '\t', correct_pos)
-		p = float(correct_pos) / (pred_pos + 1e-8)
-		r = float(correct_pos) / (gt_pos + 1e-8)
-		test_acc = (2 * p * r) / (p + r + 1e-8)
-		custom_print('Test P:', round(p, 3))
-		custom_print('Test R:', round(r, 3))
+		test_p = float(correct_pos) / (pred_pos + 1e-8)
+		test_r = float(correct_pos) / (gt_pos + 1e-8)
+		test_acc = (2 * test_p * test_r) / (test_p + test_r + 1e-8)
+		custom_print('Test P:', round(test_p, 3))
+		custom_print('Test R:', round(test_r, 3))
 		custom_print('Test F1:', round(test_acc, 3))
 
 		if test_acc >= best_test_f1:
 			best_test_epoch = epoch_idx + 1
 			best_test_f1 = test_acc
-			best_test_p = p
-			best_test_r = r
+			best_test_p = test_p
+			best_test_r = test_r
 
-		if dev_acc >= best_dev_acc:
+		# if dev_acc >= best_dev_acc:
+		if dev_r >= best_dev_acc:
 			best_epoch_idx = epoch_idx + 1
 			best_epoch_seed = cur_seed
-			best_p = p
-			best_r = r
+			best_p = test_p
+			best_r = test_r
 			best_f1 = test_acc
 			custom_print('model saved......')
-			best_dev_acc = dev_acc
+			# best_dev_acc = dev_acc
+			best_dev_acc = dev_r
 			torch.save(model.state_dict(), best_model_file)
 
 		custom_print('\n\n')
