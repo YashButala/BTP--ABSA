@@ -800,6 +800,19 @@ class Encoder(nn.Module):
 			elif bert_mode == 'res':
 				self.BERT_model = BertModel.from_pretrained("/home/rajdeep/rest_pt/", output_attentions=True, output_hidden_states=False)
 
+		for name, param in self.BERT_model.named_parameters():
+			flag = False
+			for num in trainable_layers:
+				if 'layer.'+ str(num) + '.' in name:
+					param.requires_grad = True
+					flag = True
+					break
+			if not flag:
+				if 'pooler' in name or 'embedding' in name:
+					param.requires_grad = True
+				else:
+					param.requires_grad = False
+
 		self.dropout = nn.Dropout(self.drop_rate)
 
 	
@@ -897,6 +910,7 @@ class Decoder(nn.Module):
 									 len(relnameToIdx))
 		else:
 			self.sent_lin = nn.Linear(dec_hidden_size + 4 * pointer_net_hidden_size, len(relnameToIdx))
+		
 		self.dropout = nn.Dropout(self.drop_rate)
 
 	
@@ -1395,16 +1409,14 @@ def train_model(model_id, train_samples, dev_samples, test_samples, best_model_f
 			best_test_p = test_p
 			best_test_r = test_r
 
-		# if dev_acc >= best_dev_acc:
-		if dev_p >= best_dev_acc:
+		if dev_acc >= best_dev_acc:		
 			best_epoch_idx = epoch_idx + 1
 			best_epoch_seed = cur_seed
 			best_p = test_p
 			best_r = test_r
 			best_f1 = test_acc
 			custom_print('model saved......')
-			# best_dev_acc = dev_acc
-			best_dev_acc = dev_p
+			best_dev_acc = dev_acc			
 			# torch.save(model.state_dict(), best_model_file)
 
 		custom_print('\n\n')
@@ -1469,6 +1481,8 @@ if __name__ == "__main__":
 	gen_directions = ['AspectFirst', 'OpinionFirst', 'BothWays']
 	gen_direct = gen_directions[0]
 	enc_type = ['LSTM', 'GCN', 'LSTM-GCN', 'BERT'][-1]
+	# trainable_layers = [0,1,2,3,4,5,6,7,8,9,10,11]
+	trainable_layers = [8,9,10,11]
 	
 	# embedding_file = 'cased_glove300.txt'
 	# embedding_file = os.path.join(src_data_folder, 'w2v.txt')
