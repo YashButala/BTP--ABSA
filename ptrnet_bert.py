@@ -803,12 +803,12 @@ class Encoder(nn.Module):
 		if freeze_embeddings:
 			for param in list(self.BERT_model.embeddings.parameters()):
 				param.requires_grad = False
-			print ("Froze Embedding Layer")
+			custom_print("Froze Embedding Layer")
 
 		for layer_idx in freeze_layers:
 			for param in list(self.BERT_model.encoder.layer[layer_idx].parameters()):
 				param.requires_grad = False
-			print ("Froze Layer: ", layer_idx)
+			custom_print("Froze Layer: ", layer_idx)
 
 		self.dropout = nn.Dropout(self.drop_rate)
 
@@ -854,7 +854,7 @@ class Encoder(nn.Module):
 		# print(outputs.permute(1,0,2).size())
 		# outputs = outputs.permute(1,0,2)
 		
-		outputs = autograd.Variable(outputs.cuda())
+		outputs = autograd.Variable(outputs.cuda(gpu_id))
 		
 		return outputs
 
@@ -1054,17 +1054,17 @@ class Seq2SeqModel(nn.Module):
 		src_mask = s_mask.clone()
 		src_mask[s_mask==0] = 1
 		src_mask[s_mask!=0] = 0
-		src_mask = autograd.Variable(src_mask.cuda())
+		src_mask = autograd.Variable(src_mask.cuda(gpu_id))
 		# print(enc_hs.size())
 		# print(src_mask.size())
 
-		h0 = autograd.Variable(torch.FloatTensor(torch.zeros(batch_len, dec_hidden_size))).cuda()
-		c0 = autograd.Variable(torch.FloatTensor(torch.zeros(batch_len, dec_hidden_size))).cuda()
+		h0 = autograd.Variable(torch.FloatTensor(torch.zeros(batch_len, dec_hidden_size))).cuda(gpu_id)
+		c0 = autograd.Variable(torch.FloatTensor(torch.zeros(batch_len, dec_hidden_size))).cuda(gpu_id)
 		dec_hid = (h0, c0)
 
-		# rel_embed = autograd.Variable(torch.FloatTensor(torch.zeros(batch_len, rel_embed_dim))).cuda()
-		arg1 = autograd.Variable(torch.FloatTensor(torch.zeros(batch_len, 2 * pointer_net_hidden_size))).cuda()
-		arg2 = autograd.Variable(torch.FloatTensor(torch.zeros(batch_len, 2 * pointer_net_hidden_size))).cuda()
+		# rel_embed = autograd.Variable(torch.FloatTensor(torch.zeros(batch_len, rel_embed_dim))).cuda(gpu_id)
+		arg1 = autograd.Variable(torch.FloatTensor(torch.zeros(batch_len, 2 * pointer_net_hidden_size))).cuda(gpu_id)
+		arg2 = autograd.Variable(torch.FloatTensor(torch.zeros(batch_len, 2 * pointer_net_hidden_size))).cuda(gpu_id)
 
 		prev_tuples = torch.cat((arg1, arg2), -1)
 
@@ -1178,13 +1178,13 @@ def predict(samples, model, model_id):
 		# src_pos_tags = torch.from_numpy(cur_samples_input['src_pos_tags'].astype('long'))
 		# src_loc = torch.from_numpy(cur_samples_input['src_loc'].astype('long'))
 
-		src_words_seq = autograd.Variable(src_words_seq.cuda())
-		src_words_mask = autograd.Variable(src_words_mask.cuda())
-		trg_words_seq = autograd.Variable(trg_words_seq.cuda())
+		src_words_seq = autograd.Variable(src_words_seq.cuda(gpu_id))
+		src_words_mask = autograd.Variable(src_words_mask.cuda(gpu_id))
+		trg_words_seq = autograd.Variable(trg_words_seq.cuda(gpu_id))
 		
-		# src_chars_seq = autograd.Variable(src_chars_seq.cuda())
-		# src_pos_tags = autograd.Variable(src_pos_tags.cuda())
-		# src_loc = autograd.Variable(src_loc.cuda())
+		# src_chars_seq = autograd.Variable(src_chars_seq.cuda(gpu_id))
+		# src_pos_tags = autograd.Variable(src_pos_tags.cuda(gpu_id))
+		# src_loc = autograd.Variable(src_loc.cuda(gpu_id))
 
 		with torch.no_grad():
 			if model_id == 1:
@@ -1222,7 +1222,7 @@ def train_model(model_id, train_samples, dev_samples, test_samples, best_model_f
 
 	custom_print(model)
 	if torch.cuda.is_available():
-		model.cuda()
+		model.cuda(gpu_id)
 	# if n_gpu > 1:
 	# 	model = torch.nn.DataParallel(model)
 
@@ -1287,26 +1287,26 @@ def train_model(model_id, train_samples, dev_samples, test_samples, best_model_f
 			trg_vec = torch.from_numpy(cur_samples_input['target_vec'].astype('float32'))
 			trg_vec_mask = torch.from_numpy(cur_samples_input['target_vec_mask'].astype('bool'))
 
-			src_words_seq = autograd.Variable(src_words_seq.cuda())
-			src_words_mask = autograd.Variable(src_words_mask.cuda())
-			trg_words_seq = autograd.Variable(trg_words_seq.cuda())
+			src_words_seq = autograd.Variable(src_words_seq.cuda(gpu_id))
+			src_words_mask = autograd.Variable(src_words_mask.cuda(gpu_id))
+			trg_words_seq = autograd.Variable(trg_words_seq.cuda(gpu_id))
 			
-			# src_chars_seq = autograd.Variable(src_chars_seq.cuda())
-			# src_pos_tags = autograd.Variable(src_pos_tags.cuda())
-			# src_loc = autograd.Variable(src_loc.cuda())
+			# src_chars_seq = autograd.Variable(src_chars_seq.cuda(gpu_id))
+			# src_pos_tags = autograd.Variable(src_pos_tags.cuda(gpu_id))
+			# src_loc = autograd.Variable(src_loc.cuda(gpu_id))
 
-			arg1sweights = autograd.Variable(arg1sweights.cuda())
-			arg1eweights = autograd.Variable(arg1eweights.cuda())
-			arg2sweights = autograd.Variable(arg2sweights.cuda())
-			arg2eweights = autograd.Variable(arg2eweights.cuda())
+			arg1sweights = autograd.Variable(arg1sweights.cuda(gpu_id))
+			arg1eweights = autograd.Variable(arg1eweights.cuda(gpu_id))
+			arg2sweights = autograd.Variable(arg2sweights.cuda(gpu_id))
+			arg2eweights = autograd.Variable(arg2eweights.cuda(gpu_id))
 
-			rel = autograd.Variable(rel.cuda())
-			arg1s = autograd.Variable(arg1s.cuda())
-			arg1e = autograd.Variable(arg1e.cuda())
-			arg2s = autograd.Variable(arg2s.cuda())
-			arg2e = autograd.Variable(arg2e.cuda())
-			trg_vec = autograd.Variable(trg_vec.cuda())
-			trg_vec_mask = autograd.Variable(trg_vec_mask.cuda())
+			rel = autograd.Variable(rel.cuda(gpu_id))
+			arg1s = autograd.Variable(arg1s.cuda(gpu_id))
+			arg1e = autograd.Variable(arg1e.cuda(gpu_id))
+			arg2s = autograd.Variable(arg2s.cuda(gpu_id))
+			arg2e = autograd.Variable(arg2e.cuda(gpu_id))
+			trg_vec = autograd.Variable(trg_vec.cuda(gpu_id))
+			trg_vec_mask = autograd.Variable(trg_vec_mask.cuda(gpu_id))
 			trg_seq_len = rel.size()[1]
 			
 			if model_id == 1:
@@ -1435,6 +1435,7 @@ def train_model(model_id, train_samples, dev_samples, test_samples, best_model_f
 
 if __name__ == "__main__":
 	os.environ['CUDA_VISIBLE_DEVICES'] = sys.argv[1]
+	gpu_id = int(sys.argv[1])
 	random_seed = int(sys.argv[2])
 	# n_gpu = torch.cuda.device_count()
 	set_random_seeds(random_seed)
@@ -1478,8 +1479,9 @@ if __name__ == "__main__":
 	gen_directions = ['AspectFirst', 'OpinionFirst', 'BothWays']
 	gen_direct = gen_directions[0]
 	enc_type = ['LSTM', 'GCN', 'LSTM-GCN', 'BERT'][-1]
-	freeze_embeddings = False
-	freeze_layers = [0,1,2,3,4,5,6,7]
+	freeze_embeddings = True
+	# freeze_layers = [0,1,2,3,4,5,6,7]
+	freeze_layers = []
 	
 	# embedding_file = 'cased_glove300.txt'
 	# embedding_file = os.path.join(src_data_folder, 'w2v.txt')
@@ -1601,7 +1603,7 @@ if __name__ == "__main__":
 		best_model = get_model(model_name)
 		custom_print(best_model)
 		if torch.cuda.is_available():
-			best_model.cuda()
+			best_model.cuda(gpu_id)
 		# if n_gpu > 1:
 		# 	best_model = torch.nn.DataParallel(best_model)
 		best_model.load_state_dict(torch.load(model_file))
