@@ -801,12 +801,12 @@ class Encoder(nn.Module):
 				self.BERT_model = BertModel.from_pretrained("/home/rajdeep/rest_pt/", output_attentions=True, output_hidden_states=False)
 
 		if freeze_embeddings:
-			for param in list(model.bert.embeddings.parameters()):
+			for param in list(self.BERT_model.embeddings.parameters()):
 				param.requires_grad = False
 			print ("Froze Embedding Layer")
 
 		for layer_idx in freeze_layers:
-			for param in list(model.bert.encoder.layer[layer_idx].parameters()):
+			for param in list(self.BERT_model.encoder.layer[layer_idx].parameters()):
 				param.requires_grad = False
 			print ("Froze Layer: ", layer_idx)
 
