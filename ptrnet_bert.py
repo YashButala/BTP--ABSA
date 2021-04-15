@@ -1479,7 +1479,7 @@ if __name__ == "__main__":
 	gen_directions = ['AspectFirst', 'OpinionFirst', 'BothWays']
 	gen_direct = gen_directions[0]
 	enc_type = ['LSTM', 'GCN', 'LSTM-GCN', 'BERT'][-1]
-	freeze_embeddings = True
+	freeze_embeddings = False
 	# freeze_layers = [0,1,2,3,4,5,6,7]
 	freeze_layers = []
 	
