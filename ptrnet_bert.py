@@ -1645,7 +1645,7 @@ if __name__ == "__main__":
 	args = parser.parse_args()
 
 	gpu_id = args.gpu_id
-	os.environ['CUDA_VISIBLE_DEVICES'] = gpu_id
+	os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
 	# n_gpu = torch.cuda.device_count()	
 	random_seed = args.seed	
 	set_random_seeds(random_seed)
