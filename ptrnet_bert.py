@@ -1730,27 +1730,27 @@ if __name__ == "__main__":
 	relnameToIdx, relIdxToName = get_relations(rel_file)
 
 	if bert_mode != 'gen':
-		trg_data_folder += 'pt_'
+		trg_data_folder += 'pt'
 	if optim == 'adamw':
-		trg_data_folder += "adamw_"
+		trg_data_folder += "_adamw"
 	if l2 == 'n':
-		trg_data_folder += args.gen_direct + "_"
+		trg_data_folder += "_" + args.gen_direct
 	else:
-		trg_data_folder += "WD_" + str(wd) + "_" + args.gen_direct + "_"
+		trg_data_folder += "_WD_" + str(wd) + "_" + args.gen_direct
 	if use_sort == 'n':
-		trg_data_folder += "SortAF_"
+		trg_data_folder += "_SortAF"
 	if use_maxPool == 'y':
-		trg_data_folder += "BW_Max_"
+		trg_data_folder += "_BW_Max"
 	if model_save_policy != 'dev_f1':
-		trg_data_folder += model_save_policy + "_"
+		trg_data_folder += "_" + model_save_policy
 	if args.freeze_emb == 'y':
-		trg_data_folder += "FEmb_"
+		trg_data_folder += "_FEmb"
 	if args.freeze_layers == 'y':
-		trg_data_folder += "FL_"
+		trg_data_folder += "_FL"
 	if args.use_pos_tags == 'y':
-		trg_data_folder += 'POS_'
+		trg_data_folder += '_POS'
 	if args.use_dep_emb == 'y':
-		trg_data_folder += 'DEP'
+		trg_data_folder += '_DEP'
 	if not os.path.exists(trg_data_folder):
 		os.mkdir(trg_data_folder)
 
