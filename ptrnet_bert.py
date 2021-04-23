@@ -501,20 +501,20 @@ def get_splitted_F1(data, preds):
 				if isCorrect == 1:
 					correct_multiRel += 1
 			flag = 0
-			for j in range(len(data[i].TrgRels)):
-				for k in range(len(data[i].TrgRels)):
+			for j in range(len(data[i].TrgPointers)):
+				for k in range(len(data[i].TrgPointers)):
 					if j == k:
 						continue
-					if data[i].TrgRels[j][0] == data[i].TrgRels[k][0] and data[i].TrgRels[j][1] == data[i].TrgRels[k][1]:
+					if data[i].TrgPointers[j][0] == data[i].TrgPointers[k][0] and data[i].TrgPointers[j][1] == data[i].TrgPointers[k][1]:
 						flag = 1
 						break
-					if data[i].TrgRels[j][2] == data[i].TrgRels[k][2] and data[i].TrgRels[j][3] == data[i].TrgRels[k][3]:
+					if data[i].TrgPointers[j][2] == data[i].TrgPointers[k][2] and data[i].TrgPointers[j][3] == data[i].TrgPointers[k][3]:
 						flag = 1
 						break
-					if data[i].TrgRels[j][0] == data[i].TrgRels[k][2] and data[i].TrgRels[j][1] == data[i].TrgRels[k][3]:
+					if data[i].TrgPointers[j][0] == data[i].TrgPointers[k][2] and data[i].TrgPointers[j][1] == data[i].TrgPointers[k][3]:
 						flag = 1
 						break
-					if data[i].TrgRels[j][2] == data[i].TrgRels[k][0] and data[i].TrgRels[j][3] == data[i].TrgRels[k][1]:
+					if data[i].TrgPointers[j][2] == data[i].TrgPointers[k][0] and data[i].TrgPointers[j][3] == data[i].TrgPointers[k][1]:
 						flag = 1
 						break
 				if flag == 1:
