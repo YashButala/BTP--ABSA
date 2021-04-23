@@ -455,6 +455,9 @@ def print_scores(gt_pos, pred_pos, correct_pos):
 
 
 def get_splitted_F1(data, preds):
+	gt_pos = 0
+	pred_pos = 0
+	correct_pos = 0
 	count_single = 0
 	gt_single = 0
 	pred_single = 0
@@ -477,9 +480,12 @@ def get_splitted_F1(data, preds):
 
 		pred_triples, _ = get_pred_triples(preds[0][i], preds[1][i], preds[2][i], preds[3][i],
 														  preds[4][i], data[i].SrcWords)		
+		gt_pos += len(gt_triples)
+		pred_pos += len(pred_triples)
 		for gt_triple in gt_triples:
 			if is_full_match(gt_triple, pred_triples):
 				isCorrect = 1
+				correct_pos += 1
 
 		if len(data[i].TrgRels) == 1:
 			count_single += 1
@@ -527,6 +533,8 @@ def get_splitted_F1(data, preds):
 					correct_overlappingEnt += 1
 		isCorrect = 0
 
+	custom_print('Re-checking the scores of entire Test data with the best saved model:')
+	print_scores(gt_pos, pred_pos, correct_pos)
 	custom_print('Now printing the scores for various subsets of Test Data with the best saved model:')
 	custom_print('Total sentences with single triples:', count_single)
 	print_scores(gt_single, pred_single, correct_single)
