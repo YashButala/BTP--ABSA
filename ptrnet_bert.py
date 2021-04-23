@@ -1098,9 +1098,13 @@ class Decoder(nn.Module):
 			ap_pointer_lstm_out = ap_second_pointer_lstm_out
 			op_pointer_lstm_out = op_first_pointer_lstm_out
 		else:
-			ap_pointer_lstm_out = (ap_first_pointer_lstm_out + ap_second_pointer_lstm_out)/2
-			op_pointer_lstm_out = (op_first_pointer_lstm_out + op_second_pointer_lstm_out)/2
-			# Try concatenation
+			if use_maxPool == 'n':
+				ap_pointer_lstm_out = (ap_first_pointer_lstm_out + ap_second_pointer_lstm_out)/2
+				op_pointer_lstm_out = (op_first_pointer_lstm_out + op_second_pointer_lstm_out)/2
+			else:
+				ap_pointer_lstm_out = torch.max(ap_first_pointer_lstm_out, ap_second_pointer_lstm_out)
+				op_pointer_lstm_out = torch.max(op_first_pointer_lstm_out, op_second_pointer_lstm_out)
+			
 
 		ap_start = self.ap_start_lin(ap_pointer_lstm_out).squeeze()
 		ap_start.data.masked_fill_(src_mask.data, -float('inf'))
@@ -1632,6 +1636,7 @@ if __name__ == "__main__":
 	parser.add_argument('--save_policy', type=str, default="dev_f1")
 	parser.add_argument('--gen_direct', type=str, default="af")
 	parser.add_argument('--use_sort', type=str, default="y")
+	parser.add_argument('--use_maxPool', type=str, default="n")
 	parser.add_argument('--freeze_emb', type=str, default='n')
 	parser.add_argument('--freeze_layers', type=str, default='n')
 	parser.add_argument('--use_pos_tags', type=str, default='n')
@@ -1672,6 +1677,7 @@ if __name__ == "__main__":
 	elif gen_direct == 'bw':
 		gen_direct = gen_directions[2]
 	use_sort = args.use_sort
+	use_maxPool = args.use_maxPool
 	
 	enc_type = 'BERT'
 	if args.freeze_emb == 'n':
@@ -1752,6 +1758,8 @@ if __name__ == "__main__":
 		trg_data_folder += "WD_" + str(wd) + "_" + args.gen_direct + "_"
 	if use_sort == 'n':
 		trg_data_folder += "SortAF_"
+	if use_maxPool == 'y':
+		trg_data_folder += "BW_Max_"
 	if save_policy != 'dev_f1':
 		trg_data_folder += save_policy + "_"
 	if args.freeze_emb == 'y':
