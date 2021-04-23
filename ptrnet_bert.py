@@ -1338,25 +1338,6 @@ def predict(samples, model, model_id):
 		arg1e += list(outputs[2].data.cpu().numpy())
 		arg2s += list(outputs[3].data.cpu().numpy())
 		arg2e += list(outputs[4].data.cpu().numpy())
-
-		rel = rel.view(-1, 1).squeeze()
-		arg1s = arg1s.view(-1, 1).squeeze()
-		arg1e = arg1e.view(-1, 1).squeeze()
-		arg2s = arg2s.view(-1, 1).squeeze()
-		arg2e = arg2e.view(-1, 1).squeeze()
-		outputs[5].data.masked_fill_(trg_vec_mask.unsqueeze(2).data, 0)
-		pred_vec = torch.sum(outputs[5], 1)
-
-		loss = rel_criterion(outputs[0], rel) + \
-			   wf * (pointer_criterion(outputs[1], arg1s) + pointer_criterion(outputs[2], arg1e)) + \
-			   wf * (pointer_criterion(outputs[3], arg2s) + pointer_criterion(outputs[4], arg2e))
-
-		if use_vec_loss:
-			loss = loss + vec_criterion(pred_vec, trg_vec)
-
-		if use_flood == 'y':
-			loss = (loss-0.25).abs() + 0.25
-		
 		model.zero_grad()
 
 	end_time = datetime.datetime.now()
