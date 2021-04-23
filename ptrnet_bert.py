@@ -3,6 +3,7 @@ import sys
 import os
 import numpy as np
 import random
+import argparse
 
 from collections import OrderedDict
 import pickle
@@ -22,6 +23,8 @@ import torch.optim as optim
 # from nltk.tokenize import SpaceTokenizer
 
 from transformers import *
+import logging
+logging.basicConfig(level=logging.ERROR)
 
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
@@ -204,7 +207,13 @@ def get_sample(uid, src_line, trg_line, nr_line, datatype):
 			parts += nr_parts[:nr_cnt]
 	
 	if datatype == 1:
-		triples = sorted(triples, key=lambda element: (element[0], element[2]))		
+		if use_sort == 'n':
+			triples = sorted(triples, key=lambda element: (element[0], element[2]))
+		else:
+			if gen_direct == 'AspectFirst' or gen_direct == 'BothWays':
+				triples = sorted(triples, key=lambda element: (element[0], element[2]))
+			else:
+				triples = sorted(triples, key=lambda element: (element[2], element[0]))
 
 	for triple in triples:
 		trg_rels.append(triple[4])
@@ -367,6 +376,38 @@ def get_pred_triples(rel, arg1s, arg1e, arg2s, arg2e, src_words):
 		
 		# if job_mode == 'test' and abs(s1 - s2) > max_dist:
 		#     continue
+
+		if enc_type == 'BERT':
+			if src_words[s1].startswith('##') and s1 > 0:
+				while src_words[s1].startswith('##') and s1 > 0:
+						s1 -= 1
+			if src_words[s2].startswith('##') and s2 > 0:
+				while src_words[s2].startswith('##') and s2 > 0:
+					s2 -= 1
+			if src_words[e1].startswith('##'):
+				while e1 < len(src_words)-1:
+					if src_words[e1+1].startswith('##'):
+						e1 += 1
+					else:
+						break
+			elif e1 < len(src_words)-1:
+				while e1 < len(src_words)-1:
+					if src_words[e1+1].startswith('##'):
+						e1 += 1
+					else:
+						break
+			if src_words[e2].startswith('##'):
+				while e2 < len(src_words)-1:
+					if src_words[e2+1].startswith('##'):
+						e2 += 1
+					else:
+						break
+			elif e2 < len(src_words)-1:
+				while e2 < len(src_words)-1:
+					if src_words[e2+1].startswith('##'):
+						e2 += 1
+					else:
+						break
 		
 		arg1 = ' '.join(src_words[s1: e1 + 1])
 		arg2 = ' '.join(src_words[s2: e2 + 1])
@@ -401,6 +442,100 @@ def get_F1(data, preds):
 	print(total_pred_pos)
 	
 	return pred_pos, gt_pos, correct_pos
+
+
+def print_scores(gt_pos, pred_pos, correct_pos):
+	custom_print('GT Triple Count:', gt_pos, '\tPRED Triple Count:', pred_pos, '\tCORRECT Triple Count:', correct_pos)
+	test_p = float(correct_pos) / (pred_pos + 1e-8)
+	test_r = float(correct_pos) / (gt_pos + 1e-8)
+	test_acc = (2 * test_p * test_r) / (test_p + test_r + 1e-8)
+	custom_print('Test P:', round(test_p, 3))
+	custom_print('Test R:', round(test_r, 3))
+	custom_print('Test F1:', round(test_acc, 3))
+
+
+def get_splitted_F1(data, preds):
+	count_single = 0
+	gt_single = 0
+	pred_single = 0
+	correct_single = 0
+	count_multi = 0
+	gt_multi = 0
+	pred_multi = 0
+	correct_multi = 0
+	count_multiRel = 0
+	gt_multiRel = 0
+	pred_multiRel = 0
+	correct_multiRel = 0
+	count_overlappingEnt = 0
+	gt_overlappingEnt = 0
+	pred_overlappingEnt = 0
+	correct_overlappingEnt = 0
+	isCorrect = 0
+	for i in range(0, len(data)):
+		gt_triples = get_gt_triples(data[i].SrcWords, data[i].TrgRels, data[i].TrgPointers)
+
+		pred_triples, _ = get_pred_triples(preds[0][i], preds[1][i], preds[2][i], preds[3][i],
+														  preds[4][i], data[i].SrcWords)		
+		for gt_triple in gt_triples:
+			if is_full_match(gt_triple, pred_triples):
+				isCorrect = 1
+
+		if len(data[i].TrgRels) == 1:
+			count_single += 1
+			gt_single += len(gt_triples)
+			pred_single += len(pred_triples)
+			if isCorrect == 1:
+				correct_single += 1			
+		else:
+			count_multi += 1
+			gt_multi += len(gt_triples)
+			pred_multi += len(pred_triples)
+			if isCorrect == 1:
+				correct_multi += 1
+			unique_rels = set(data[i].TrgRels)
+			if len(unique_rels) > 1:
+				count_multiRel += 1
+				gt_multiRel += len(gt_triples)
+				pred_multiRel += len(pred_triples)
+				if isCorrect == 1:
+					correct_multiRel += 1
+			flag = 0
+			for j in range(len(data[i].TrgRels)):
+				for k in range(len(data[i].TrgRels)):
+					if j == k:
+						continue
+					if data[i].TrgRels[j][0] == data[i].TrgRels[k][0] and data[i].TrgRels[j][1] == data[i].TrgRels[k][1]:
+						flag = 1
+						break
+					if data[i].TrgRels[j][2] == data[i].TrgRels[k][2] and data[i].TrgRels[j][3] == data[i].TrgRels[k][3]:
+						flag = 1
+						break
+					if data[i].TrgRels[j][0] == data[i].TrgRels[k][2] and data[i].TrgRels[j][1] == data[i].TrgRels[k][3]:
+						flag = 1
+						break
+					if data[i].TrgRels[j][2] == data[i].TrgRels[k][0] and data[i].TrgRels[j][3] == data[i].TrgRels[k][1]:
+						flag = 1
+						break
+				if flag == 1:
+					break
+			if flag == 1:
+				count_overlappingEnt += 1
+				gt_overlappingEnt += len(gt_triples)
+				pred_overlappingEnt += len(pred_triples)
+				if isCorrect == 1:
+					correct_overlappingEnt += 1
+		isCorrect = 0
+
+	print('Now printing the scores for various subsets of Test Data with the best saved model:')
+	print('Total sentences with single triples:', count_single)
+	print_scores(gt_single, pred_single, correct_single)
+	print('Total sentences with multiple triples:', count_multi)
+	print_scores(gt_multi, pred_multi, correct_multi)
+	print('Total sentences triples with varying sentiments:', count_multiRel)
+	print_scores(gt_multiRel, pred_multiRel, correct_multiRel)
+	print('Total sentences with overlapping triples:', count_overlappingEnt)
+	print_scores(gt_overlappingEnt, pred_overlappingEnt, correct_overlappingEnt)
 
 
 def write_test_res(src, trg, data, preds, outfile):
@@ -965,6 +1100,7 @@ class Decoder(nn.Module):
 		else:
 			ap_pointer_lstm_out = (ap_first_pointer_lstm_out + ap_second_pointer_lstm_out)/2
 			op_pointer_lstm_out = (op_first_pointer_lstm_out + op_second_pointer_lstm_out)/2
+			# Try concatenation
 
 		ap_start = self.ap_start_lin(ap_pointer_lstm_out).squeeze()
 		ap_start.data.masked_fill_(src_mask.data, -float('inf'))
@@ -1198,6 +1334,24 @@ def predict(samples, model, model_id):
 		arg1e += list(outputs[2].data.cpu().numpy())
 		arg2s += list(outputs[3].data.cpu().numpy())
 		arg2e += list(outputs[4].data.cpu().numpy())
+
+		rel = rel.view(-1, 1).squeeze()
+		arg1s = arg1s.view(-1, 1).squeeze()
+		arg1e = arg1e.view(-1, 1).squeeze()
+		arg2s = arg2s.view(-1, 1).squeeze()
+		arg2e = arg2e.view(-1, 1).squeeze()
+		outputs[5].data.masked_fill_(trg_vec_mask.unsqueeze(2).data, 0)
+		pred_vec = torch.sum(outputs[5], 1)
+
+		loss = rel_criterion(outputs[0], rel) + \
+			   wf * (pointer_criterion(outputs[1], arg1s) + pointer_criterion(outputs[2], arg1e)) + \
+			   wf * (pointer_criterion(outputs[3], arg2s) + pointer_criterion(outputs[4], arg2e))
+
+		if use_vec_loss:
+			loss = loss + vec_criterion(pred_vec, trg_vec)
+
+		if use_flood == 'y':
+			loss = (loss-0.25).abs() + 0.25
 		
 		model.zero_grad()
 
@@ -1206,7 +1360,8 @@ def predict(samples, model, model_id):
 	return rel, arg1s, arg1e, arg2s, arg2e
 
 
-def train_model(model_id, train_samples, dev_samples, test_samples, best_model_file):
+# def train_model(model_id, train_samples, dev_samples, test_samples, best_model_file):
+def train_model(model_id, train_samples, dev_samples, test_samples, test_gt_lines, best_model_file):
 	train_size = len(train_samples)
 	batch_count = int(math.ceil(train_size/batch_size))
 	move_last_batch = False
@@ -1231,7 +1386,15 @@ def train_model(model_id, train_samples, dev_samples, test_samples, best_model_f
 	vec_criterion = nn.MSELoss()
 
 	custom_print('weight factor:', wf)
-	optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=0.00001)
+
+	if optim == 'adam':
+		if l2 == 'n':
+			optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+		else:
+			optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
+	else:
+		optimizer = torch.optim.AdamW(model.parameters(), lr=lr, amsgrad=True)
+
 	custom_print(optimizer)
 
 	best_dev_acc = -1.0
@@ -1332,6 +1495,9 @@ def train_model(model_id, train_samples, dev_samples, test_samples, best_model_f
 			if use_vec_loss:
 				loss = loss + vec_criterion(pred_vec, trg_vec)
 
+			if use_flood == 'y':
+				loss = (loss-0.25).abs() + 0.25
+
 			if use_adv:
 				# loss.backward(retain_graph=True)
 				loss.backward()
@@ -1370,6 +1536,7 @@ def train_model(model_id, train_samples, dev_samples, test_samples, best_model_f
 		train_loss_val /= batch_count
 		if use_adv:
 			train_loss_val /= 2
+		
 		end_time = datetime.datetime.now()
 		custom_print('Training loss:', train_loss_val)
 		custom_print('Training time:', end_time - start_time)
@@ -1406,16 +1573,24 @@ def train_model(model_id, train_samples, dev_samples, test_samples, best_model_f
 			best_test_p = test_p
 			best_test_r = test_r
 
-		if dev_acc >= best_dev_acc:		
+		if model_save_policy == 'dev_p':
+			criterion = round(dev_p, 3)
+		elif model_save_policy == 'dev_r':
+			criterion = round(dev_r, 3)
+		else:
+			criterion = round(dev_acc, 3)
+
+		if criterion >= best_dev_acc:		
 			best_epoch_idx = epoch_idx + 1
 			best_epoch_seed = cur_seed
 			best_p = test_p
 			best_r = test_r
 			best_f1 = test_acc
+			best_test_preds = test_preds
 			custom_print('model saved......')
-			best_dev_acc = dev_acc			
-			# torch.save(model.state_dict(), best_model_file)
-
+			best_dev_acc = criterion			
+			# torch.save(model.state_dict(), best_model_file			
+			
 		custom_print('\n\n')
 		if epoch_idx + 1 - best_epoch_idx >= early_stop_cnt:
 			break
@@ -1431,40 +1606,94 @@ def train_model(model_id, train_samples, dev_samples, test_samples, best_model_f
 	custom_print('Corresponding P:', round(best_test_p, 3))
 	custom_print('Corresponding R:', round(best_test_r, 3))
 	custom_print('Corresponding F1:', round(best_test_f1, 3))
+	custom_print('\n\n')
+
+	print('Test size:', len(test_samples))
+	get_splitted_F1(test_samples, best_test_preds)
+	write_test_res(src_test_file, test_gt_lines, test_samples, best_test_preds, os.path.join(trg_data_folder, 'test.out'))
 
 
 if __name__ == "__main__":
-	os.environ['CUDA_VISIBLE_DEVICES'] = sys.argv[1]
-	gpu_id = int(sys.argv[1])
-	random_seed = int(sys.argv[2])
-	# n_gpu = torch.cuda.device_count()
+	parser = argparse.ArgumentParser()
+	parser.add_argument('--gpu_id', type=int, default=0)
+	parser.add_argument('--seed', type=int, default=42)
+	parser.add_argument('--src_folder', type=str, default="lap14/")
+	parser.add_argument('--trg_folder', type=str, default="lap14/ptrnet_bert")
+	parser.add_argument('--job_mode', type=str, default="train")
+	parser.add_argument('--bert_mode', type=str, default="gen")
+	parser.add_argument('--bs', type=int, default=16)
+	parser.add_argument('--epoch', type=int, default=30)
+	parser.add_argument('--optim', type=str, default="adam")
+	parser.add_argument('--lr', type=float, default=1e-3)
+	parser.add_argument('--l2', type=str, default="n")
+	parser.add_argument('--wd', type=float, default=1e-4)
+	parser.add_argument('--dropout', type=float, default=0.5)
+	parser.add_argument('--use_flood', type=str, default='n')
+	parser.add_argument('--save_policy', type=str, default="dev_f1")
+	parser.add_argument('--gen_direct', type=str, default="af")
+	parser.add_argument('--use_sort', type=str, default="y")
+	parser.add_argument('--freeze_emb', type=str, default='n')
+	parser.add_argument('--freeze_layers', type=str, default='n')
+	parser.add_argument('--use_pos_tags', type=str, default='n')
+	parser.add_argument('--use_dep_emb', type=str, default='n')
+
+	args = parser.parse_args()
+
+	gpu_id = args.gpu_id
+	os.environ['CUDA_VISIBLE_DEVICES'] = gpu_id
+	# n_gpu = torch.cuda.device_count()	
+	random_seed = args.seed	
 	set_random_seeds(random_seed)
-
-	src_data_folder = sys.argv[3]
-	trg_data_folder = sys.argv[4]
-	if not os.path.exists(trg_data_folder):
-		os.mkdir(trg_data_folder)
+	src_data_folder = args.src_folder
+	trg_data_folder = args.trg_folder
 	model_name = 1
-	job_mode = sys.argv[5]
-	bert_mode = sys.argv[6]
+	job_mode = args.job_mode
+	bert_mode = args.bert_mode
 	tokenizer = getTokenizer(bert_mode)
-
-	batch_size = int(sys.argv[7])	# 10
-	num_epoch = int(sys.argv[8])	# 30 for each dataset separately and 100 for res_all
-	drop_rate = 0.5
+	batch_size = args.bs
+	num_epoch = args.epoch
+	if src_folder.startswith('resall'):
+		num_epoch = 50
+	optim = args.optim
+	lr = args.lr
+	l2 = args.l2
+	wd = args.wd
+	drop_rate = args.dropout
 	early_stop_cnt = num_epoch
+	model_save_policy = args.save_policy
+	use_flood = args.use_flood
+
+	gen_directions = ['AspectFirst', 'OpinionFirst', 'BothWays']
+	gen_direct = args.gen_direct
+	if gen_direct == 'af':
+		gen_direct = gen_directions[0]
+	elif gen_direct == 'of':
+		gen_direct = gen_directions[1]
+	elif gen_direct == 'bw':
+		gen_direct = gen_directions[2]
+	use_sort = args.use_sort
+	
+	enc_type = 'BERT'
+	if args.freeze_emb == 'n':
+		freeze_embeddings = False
+	else:
+		freeze_embeddings = True
+	if args.freeze_layers == 'n':
+		freeze_layers = []
+	else:
+		freeze_layers = [0,1,2,3,4,5,6,7]	
 
 	use_sentiment_attention = False
 	use_nr_triplets = False
-	use_data_aug = False	# bool(int(sys.argv[8]))
+	use_data_aug = False
 
-	use_adv = False	# bool(int(sys.argv[9]))
-	adv_eps = 0.01	# float(sys.argv[10])
-	rel_th = 0.5	
+	use_adv = False
+	adv_eps = 0.01
+	rel_th = 0.5
 
-	use_gold_location = False	# bool(int(sys.argv[11]))
-	use_vec_loss = False	# bool(int(sys.argv[12]))
-	use_hadamard = False	# bool(int(sys.argv[13]))
+	use_gold_location = False
+	use_vec_loss = False
+	use_hadamard = False
 	
 	max_src_len = 100
 	max_trg_len = 10
@@ -1475,30 +1704,24 @@ if __name__ == "__main__":
 	wf = 1
 	att_type = 2
 	# max_dist = 10
-	
-	gen_directions = ['AspectFirst', 'OpinionFirst', 'BothWays']
-	gen_direct = gen_directions[0]
-	enc_type = ['LSTM', 'GCN', 'LSTM-GCN', 'BERT'][-1]
-	freeze_embeddings = False
-	# freeze_layers = [0,1,2,3,4,5,6,7]
-	freeze_layers = []
-	
-	# embedding_file = 'cased_glove300.txt'
-	# embedding_file = os.path.join(src_data_folder, 'w2v.txt')
 
 	# lower_cased = False
 	# use_char_embed = True
-	# use_pos_tags = True
 	# use_loc_embed = False
 
 	# word_embed_dim = 300
 	# word_min_freq = 10
-	# char_embed_dim = 25
-	# pos_tag_dim = 25
+	# char_embed_dim = 25	
 	# char_feature_size = 25
 	# conv_filter_size = 3
 	# max_word_len = 25
 	# loc_embed_dim = 25
+
+	if args.use_pos_tags == 'y':
+		use_pos_tags = True
+		pos_tag_dim = 25
+	else:
+		use_pos_tags = False
 
 	rel_embed_dim = 25
 
@@ -1518,6 +1741,29 @@ if __name__ == "__main__":
 	Sample = recordclass("Sample", "Id SrcLen SrcWords TrgLen TrgRels TrgPointers")
 	rel_file = os.path.join(src_data_folder, 'relations.txt')
 	relnameToIdx, relIdxToName = get_relations(rel_file)
+
+	if bert_mode != 'gen':
+		trg_data_folder += 'pt_'
+	if optim == 'adamw':
+		trg_data_folder += "adamw_"
+	if l2 == 'n':
+		trg_data_folder += args.gen_direct + "_"
+	else:
+		trg_data_folder += "WD_" + str(wd) + "_" + args.gen_direct + "_"
+	if use_sort == 'n':
+		trg_data_folder += "SortAF_"
+	if save_policy != 'dev_f1':
+		trg_data_folder += save_policy + "_"
+	if args.freeze_emb == 'y':
+		trg_data_folder += "FEmb_"
+	if args.freeze_layers == 'y':
+		trg_data_folder += "FL_"
+	if args.use_pos_tags == 'y':
+		trg_data_folder += 'POS_'
+	if args.use_dep_emb == 'y':
+		trg_data_folder += 'DEP'
+	if not os.path.exists(trg_data_folder):
+		os.mkdir(trg_data_folder)
 
 	if bert_mode == 'gen':
 		f_train_sent = 'trainb.sent'
@@ -1572,6 +1818,10 @@ if __name__ == "__main__":
 		custom_print('Development data size:', len(dev_data))
 		custom_print('Test data size:', len(test_data))
 
+		reader = open(os.path.join(src_data_folder, f_test_tuple))
+		test_gt_lines = reader.readlines()
+		reader.close()
+
 		# all_data = train_data + dev_data + test_data
 
 		# custom_print("preparing vocabulary......")
@@ -1584,7 +1834,8 @@ if __name__ == "__main__":
 		# 														save_vocab, embedding_file)
 
 		custom_print("Training started......")
-		train_model(model_name, train_data, dev_data, test_data, model_file_name)
+		# train_model(model_name, train_data, dev_data, test_data, model_file_name)
+		train_model(model_name, train_data, dev_data, test_data, test_gt_lines, model_file_name)
 		logger.close()
 
 	if job_mode == 'test':
@@ -1635,4 +1886,3 @@ if __name__ == "__main__":
 					   os.path.join(trg_data_folder, 'test.out'))
 
 		logger.close()
-		
