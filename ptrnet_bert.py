@@ -527,14 +527,14 @@ def get_splitted_F1(data, preds):
 					correct_overlappingEnt += 1
 		isCorrect = 0
 
-	print('Now printing the scores for various subsets of Test Data with the best saved model:')
-	print('Total sentences with single triples:', count_single)
+	custom_print('Now printing the scores for various subsets of Test Data with the best saved model:')
+	custom_print('Total sentences with single triples:', count_single)
 	print_scores(gt_single, pred_single, correct_single)
-	print('Total sentences with multiple triples:', count_multi)
+	custom_print('Total sentences with multiple triples:', count_multi)
 	print_scores(gt_multi, pred_multi, correct_multi)
-	print('Total sentences triples with varying sentiments:', count_multiRel)
+	custom_print('Total sentences triples with varying sentiments:', count_multiRel)
 	print_scores(gt_multiRel, pred_multiRel, correct_multiRel)
-	print('Total sentences with overlapping triples:', count_overlappingEnt)
+	custom_print('Total sentences with overlapping triples:', count_overlappingEnt)
 	print_scores(gt_overlappingEnt, pred_overlappingEnt, correct_overlappingEnt)
 
 
