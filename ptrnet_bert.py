@@ -1760,8 +1760,8 @@ if __name__ == "__main__":
 		trg_data_folder += "SortAF_"
 	if use_maxPool == 'y':
 		trg_data_folder += "BW_Max_"
-	if save_policy != 'dev_f1':
-		trg_data_folder += save_policy + "_"
+	if model_save_policy != 'dev_f1':
+		trg_data_folder += model_save_policy + "_"
 	if args.freeze_emb == 'y':
 		trg_data_folder += "FEmb_"
 	if args.freeze_layers == 'y':
