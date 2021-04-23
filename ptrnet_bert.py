@@ -1657,7 +1657,7 @@ if __name__ == "__main__":
 	tokenizer = getTokenizer(bert_mode)
 	batch_size = args.bs
 	num_epoch = args.epoch
-	if src_folder.startswith('resall'):
+	if src_data_folder.startswith('resall'):
 		num_epoch = 50
 	optim = args.optim
 	lr = args.lr
