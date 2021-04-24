@@ -1538,7 +1538,7 @@ def train_model(model_id, train_samples, dev_samples, test_samples, test_gt_line
 		set_random_seeds(random_seed)
 		dev_preds = predict(dev_samples, model, model_id)
 
-		pred_pos, gt_pos, correct_pos = get_F1(dev_samples, dev_preds, 'dev')
+		pred_pos, gt_pos, correct_pos = get_F1(dev_samples, dev_preds, 'test')
 		custom_print(pred_pos, '\t', gt_pos, '\t', correct_pos)
 		dev_p = float(correct_pos) / (pred_pos + 1e-8)
 		dev_r = float(correct_pos) / (gt_pos + 1e-8)
