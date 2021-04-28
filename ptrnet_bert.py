@@ -1538,7 +1538,10 @@ def train_model(model_id, train_samples, dev_samples, test_samples, test_gt_line
 		set_random_seeds(random_seed)
 		dev_preds = predict(dev_samples, model, model_id)
 
-		pred_pos, gt_pos, correct_pos = get_F1(dev_samples, dev_preds, 'test')
+		if save_with_pp == 'y':
+			pred_pos, gt_pos, correct_pos = get_F1(dev_samples, dev_preds, 'test')
+		else:
+			pred_pos, gt_pos, correct_pos = get_F1(dev_samples, dev_preds, 'dev')
 		custom_print(pred_pos, '\t', gt_pos, '\t', correct_pos)
 		dev_p = float(correct_pos) / (pred_pos + 1e-8)
 		dev_r = float(correct_pos) / (gt_pos + 1e-8)
@@ -1623,6 +1626,7 @@ if __name__ == "__main__":
 	parser.add_argument('--dropout', type=float, default=0.5)
 	parser.add_argument('--use_flood', type=str, default='n')
 	parser.add_argument('--save_policy', type=str, default="dev_f1")
+	parser.add_argument('--save_with_pp', type=str, default="y")
 	parser.add_argument('--gen_direct', type=str, default="af")
 	parser.add_argument('--use_sort', type=str, default="y")
 	parser.add_argument('--use_maxPool', type=str, default="n")
@@ -1655,6 +1659,7 @@ if __name__ == "__main__":
 	drop_rate = args.dropout
 	early_stop_cnt = num_epoch
 	model_save_policy = args.save_policy
+	save_with_pp = args.save_with_pp
 	use_flood = args.use_flood
 
 	gen_directions = ['AspectFirst', 'OpinionFirst', 'BothWays']
@@ -1751,6 +1756,8 @@ if __name__ == "__main__":
 		trg_data_folder += "_BW_Max"
 	if model_save_policy != 'dev_f1':
 		trg_data_folder += "_" + model_save_policy
+	if save_with_pp == 'n':
+		trg_data_folder += "_NoPP"
 	if args.freeze_emb == 'y':
 		trg_data_folder += "_FEmb"
 	if args.freeze_layers == 'y':
