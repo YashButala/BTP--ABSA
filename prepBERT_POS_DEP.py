@@ -33,20 +33,28 @@ def getPOS_DEP(sent_file, pos_out, dep_out):
 	g2 = open(dep_out,'w')
 
 	line_count = 0
+	err_count = 0
 	
 	for line in f1:
 		line = line.strip()
 		line_count += 1
 		tokens = tokenizer.tokenize(line)
 		features = alnr.meta_tokenize(line)
-		if len(tokens) == len(features):
-			pos_tags = ' '.join([feature.pos if feature.pos == 'PUNCT' else feature.pos + "-" + feature.tag for feature in features])
-			dep_tags = ' '.join([tok.dep for tok in tokens])
+		align_tokens = [feature.token for feature in features]
+		pos_tags = [feature.pos if feature.pos == 'PUNCT' else feature.pos + "-" + feature.tag for feature in features]
+		dep_tags = [feature.dep for feature in features]
+		if tokens == align_tokens:
+			pos_tags = ' '.join(pos_tags)
+			dep_tags = ' '.join(dep_tags)
 			g1.write(pos_tags + '\n')
 			g2.write(dep_tags + '\n')
 		else:
 			print(f'Counts not matching on line {line_count} in {sent_file}..')
-			break
+			print(line)
+			print(tokens)
+			print(align_tokens)
+			print("\n")
+			err_count += 1
 
 if __name__ == "__main__":
 	mode = sys.argv[1]
