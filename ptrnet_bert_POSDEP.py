@@ -1276,7 +1276,7 @@ def train_model(model_id, train_samples, dev_samples, test_samples, test_gt_line
 	pytorch_total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
 	custom_print('Parameters size:', pytorch_total_params)
 
-	custom_print(model)
+	# custom_print(model)
 	if torch.cuda.is_available():
 		model.cuda(gpu_id)
 	# if n_gpu > 1:
