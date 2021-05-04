@@ -1,4 +1,4 @@
-%%writefile ptrnetwork_bert.py
+# %%writefile ptrnetwork_bert.py
 import sys
 import os
 import numpy as np
