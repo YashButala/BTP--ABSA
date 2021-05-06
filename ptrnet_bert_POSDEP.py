@@ -335,7 +335,7 @@ def get_pred_triples(rel, arg1s, arg1e, arg2s, arg2e, src_words, mode):
 		pred_idx = np.argmax(rel[i][1:]) + 1
 		pred_score = np.max(rel[i][1:])
 		if pred_idx == relnameToIdx['None']:
-			continue
+			break
 		if use_nr_triplets and pred_idx == relnameToIdx['NR']:
 			continue
 		
