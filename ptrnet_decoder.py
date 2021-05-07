@@ -1450,8 +1450,7 @@ if __name__ == "__main__":
 
 	src_data_folder = sys.argv[3]
 	trg_data_folder = sys.argv[4].strip().split('/')[0] + "/" + str(random_seed) + "_" + sys.argv[4].strip().split('/')[1]
-	if not os.path.exists(trg_data_folder):
-		os.mkdir(trg_data_folder)
+	
 	model_name = 1
 	job_mode = sys.argv[5]
 
@@ -1473,11 +1472,15 @@ if __name__ == "__main__":
 	lower_cased = False
 	gen_directions = ['AspectFirst', 'OpinionFirst', 'BothWays']
 	gen_direct = sys.argv[9]
+	trg_data_folder = "_" + gen_direct
 	gen_direct = gen_directions[0] if gen_direct == 'AF' else (gen_directions[1] if gen_direct == 'OF' else gen_directions[2])
 	triplet_orders = ['Random', 'AP_OP', 'OP_AP']
-	trip_order = sys.argv[10]	
+	trip_order = sys.argv[10]
+	trg_data_folder = "_" + trip_order
 	trip_order = triplet_orders[0] if trip_order == 'R' else (triplet_orders[1] if trip_order == 'AP' else triplet_orders[2])
-
+	if not os.path.exists(trg_data_folder):
+		os.mkdir(trg_data_folder)
+		
 	use_adv = False  # bool(int(sys.argv[8]))
 	adv_eps = 0.01  # float(sys.argv[9])
 	rel_th = 0.5	
