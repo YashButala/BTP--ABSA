@@ -1441,7 +1441,7 @@ def train_model(model_id, train_samples, dev_samples, test_samples, test_gt_line
 
 if __name__ == "__main__":
 	# Sample Command to Run:
-	# python3 ptrnetwork_bert.py 0 1023 lap14/ lap14/ptrnet_decoder train 16 30 30 AF AP
+	# python3 ptrnet_decoder.py 0 1023 lap14/ lap14/ptrnet_decoder train 10 100 100 AF AP
 	os.environ['CUDA_VISIBLE_DEVICES'] = sys.argv[1]
 	gpu_id = int(sys.argv[1])
 	random_seed = int(sys.argv[2])
@@ -1472,11 +1472,11 @@ if __name__ == "__main__":
 	lower_cased = False
 	gen_directions = ['AspectFirst', 'OpinionFirst', 'BothWays']
 	gen_direct = sys.argv[9]
-	trg_data_folder = "_" + gen_direct
+	trg_data_folder += "_" + gen_direct
 	gen_direct = gen_directions[0] if gen_direct == 'AF' else (gen_directions[1] if gen_direct == 'OF' else gen_directions[2])
 	triplet_orders = ['Random', 'AP_OP', 'OP_AP']
 	trip_order = sys.argv[10]
-	trg_data_folder = "_" + trip_order
+	trg_data_folder += "_" + trip_order
 	trip_order = triplet_orders[0] if trip_order == 'R' else (triplet_orders[1] if trip_order == 'AP' else triplet_orders[2])
 	if not os.path.exists(trg_data_folder):
 		os.mkdir(trg_data_folder)
