@@ -1,8 +1,26 @@
+import os
+
 def is_full_match(triplet, triplets):
-	for t in triplets:
-		if t[0] == triplet[0] and t[1] == triplet[1] and t[2] == triplet[2]:
-			return True
-	return False
+    asp = triplet.split(';')[0].strip()
+    opin = triplet.split(';')[1].strip()
+    senti = triplet.split(';')[2].strip()
+    for t in triplets:
+        aspect = t.split(';')[0].strip()
+        opinion = t.split(';')[1].strip()
+        sentiment = t.split(';')[2].strip()
+        if asp == aspect and opin == opinion and senti == sentiment:
+            return True
+    
+    return False
+
+def print_scores(gt_pos, pred_pos, correct_pos):
+    print('GT Triple Count:', gt_pos, '\tPRED Triple Count:', pred_pos, '\tCORRECT Triple Count:', correct_pos)
+    test_p = float(correct_pos) / (pred_pos + 1e-8)
+    test_r = float(correct_pos) / (gt_pos + 1e-8)
+    test_acc = (2 * test_p * test_r) / (test_p + test_r + 1e-8)
+    print('Test P:', round(test_p, 3))
+    print('Test R:', round(test_r, 3))
+    print('Test F1:', round(test_acc, 3))
 
 gt_ap = 0
 predicted_ap = 0
@@ -18,9 +36,17 @@ gt_op_list = []
 predicted_op_list = []
 correct_op_list = []
 
+proper_positions = 0
+proper_senti_count = 0
+
+gt_pos = 0
+pred_pos = 0
+correct_pos = 0
+
 with open('test.out', 'r') as f_in:
     lines = f_in.readlines()
 lineCount = len(lines)
+
 start = 1
 while start < lineCount:
     desired_lines = lines[start:start+2]
@@ -59,6 +85,25 @@ while start < lineCount:
     predicted_op_list.append(len(pred_op))
     correct_op_list.append(len(exp_op.intersection(pred_op)))
 
+    for gt_triplet in gt_triplets:
+        gt_asp = gt_triplet.split(';')[0].strip()
+        gt_opin = gt_triplet.split(';')[1].strip()
+        gt_senti = gt_triplet.split(';')[2].strip()
+        for pred_triplet in pred_triplets:
+            pred_asp = pred_triplet.split(';')[0].strip()
+            pred_opin = pred_triplet.split(';')[1].strip()
+            pred_senti = pred_triplet.split(';')[2].strip()
+            if gt_asp == pred_asp and gt_opin == pred_opin:
+                proper_positions += 1
+                if gt_senti == pred_senti:
+                    proper_senti_count += 1
+
+    gt_pos += len(gt_triplets)
+    pred_pos += len(pred_triplets)
+    for gt_triplet in gt_triplets:
+        if is_full_match(gt_triplet, pred_triplets):
+            correct_pos += 1
+    
     start += 4
 
 p_ap = float(correct_ap) / (predicted_ap + 1e-8)
@@ -86,12 +131,20 @@ print(f'Recall: {round(r_op,3)}')
 print(f'F1: {round(f1_op,3)}')
 p_op = float(sum(correct_op_list)) / (sum(predicted_op_list) + 1e-8)
 r_op = float(sum(correct_op_list)) / (sum(gt_op_list) + 1e-8)
-f1_op = (2 * p_ap * r_ap) / (p_ap + r_ap + 1e-8)
+f1_op = (2 * p_op * r_op) / (p_op + r_op + 1e-8)
 print('After rechecking:')
 print(f'Precision: {round(p_op,3)}')
 print(f'Recall: {round(r_op,3)}')
 print(f'F1: {round(f1_op,3)}')
 print("\n")
+
+print(f'Proper Positions: {proper_positions}')
+print(f'Proper Sentiments: {proper_senti_count}')
+print(f'Sentiment Prediction Accuracy: {float(proper_senti_count/proper_positions)}')
+print('\n')
+
+print_scores(gt_pos, pred_pos, correct_pos)
+print('\n')
 
 print(exp_ap)
 print(pred_ap)
