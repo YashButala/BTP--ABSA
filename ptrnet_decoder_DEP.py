@@ -18,11 +18,8 @@ import torch.nn.functional as F
 import torch.optim as optim
 torch.backends.cudnn.deterministic = True
 
-import nltk
-nltk.download('averaged_perceptron_tagger')
-from nltk.tokenize import SpaceTokenizer
-
 import spacy
+from spacy.tokenizer import Tokenizer
 nlp = spacy.load("en_core_web_sm")
 nlp.tokenizer = Tokenizer(nlp.vocab, token_match=re.compile(r'\S+').match)
 
