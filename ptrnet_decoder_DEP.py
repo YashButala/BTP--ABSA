@@ -145,7 +145,7 @@ def build_pos_tags(file1, file2, file3):
 	return pos_vocab
 
 
-def build_DEP_tags(file1, file2, file3):
+def build_dep_tags(file1, file2, file3):
 	f1 = open(file1, "r")
 	f2 = open(file2, "r")
 	f3 = open(file3, "r")
