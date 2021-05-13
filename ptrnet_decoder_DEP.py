@@ -18,6 +18,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 torch.backends.cudnn.deterministic = True
 
+import regex as re
 import spacy
 from spacy.tokenizer import Tokenizer
 nlp = spacy.load("en_core_web_sm")
